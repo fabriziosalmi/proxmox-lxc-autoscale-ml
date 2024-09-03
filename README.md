@@ -6,6 +6,20 @@
 
 ![Platform](https://img.shields.io/badge/platform-Proxmox-green) ![Python Version](https://img.shields.io/badge/python-3.x-blue) ![Version](https://img.shields.io/badge/version-alpha-red)
 
+> _LXC AutoScale ML in action :)_
+```
+2024-08-20 13:07:56,393 [INFO] Data loaded successfully from /var/log/lxc_metrics.json.
+2024-08-20 13:07:56,399 [INFO] Data preprocessed successfully.
+2024-08-20 13:07:56,416 [INFO] Feature engineering, spike detection, and trend detection completed.
+2024-08-20 13:07:56,417 [INFO] Features used for training: ['cpu_memory_ratio', 'cpu_per_process', 'cpu_trend', 'cpu_usage_percent', 'filesystem_free_gb', 'filesystem_total_gb', 'filesystem_usage_gb', 'io_reads', 'io_writes', 'max_cpu', 'max_memory', 'memory_per_process', 'memory_trend', 'memory_usage_mb', 'min_cpu', 'min_memory', 'network_rx_bytes', 'network_tx_bytes', 'process_count', 'rolling_mean_cpu', 'rolling_mean_memory', 'rolling_std_cpu', 'rolling_std_memory', 'swap_total_mb', 'swap_usage_mb', 'time_diff']
+2024-08-20 13:07:56,549 [INFO] IsolationForest model training completed.
+2024-08-20 13:07:56,549 [INFO] Processing containers for scaling decisions...
+2024-08-20 13:07:56,600 [INFO] Applying scaling actions for container 104: CPU - Scale Up, RAM - Scale Up | Confidence: 87.41%
+2024-08-20 13:07:57,257 [INFO] Successfully scaled CPU for LXC ID 104 to 4 CPU units.
+2024-08-20 13:07:57,916 [INFO] Successfully scaled RAM for LXC ID 104 to 8192 RAM units.
+2024-08-20 13:07:57,916 [INFO] Sleeping for 60 seconds before the next run.
+```
+
 ## 📚 Table of Contents
 
 - [Overview](#-overview)
