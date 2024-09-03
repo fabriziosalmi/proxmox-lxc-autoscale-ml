@@ -24,16 +24,6 @@ curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale/
 
 This command will download and execute the installation script, setting up everything you need to start using LXC AutoScale ML and its API.
 
-### Installing the LXC AutoScale API Only
-
-If you prefer to install just the LXC AutoScale API component, use the following command:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale/main/lxc_autoscale_ml/install_api.sh | bash
-```
-
-This command installs only the API, allowing you to control LXC containers programmatically without the additional machine learning capabilities.
-
 After installation, ensure that the API service is running and accessible on your network.
 
 ---
