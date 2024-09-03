@@ -1,6 +1,6 @@
 [Unit]
 Description=LXC Monitor Service
-Documentation=https://github.com/fabriziosalmi/proxmox-lxc-autoscale
+Documentation=https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml
 After=network.target
 
 [Service]
