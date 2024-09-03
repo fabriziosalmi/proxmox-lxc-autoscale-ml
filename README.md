@@ -64,6 +64,36 @@ curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-
 2. **Download & Set Up**: Retrieves the required files and configures services.
 3. **Enable Services**: Starts the API, monitoring, and ML model services.
 
+> [!IMPORTANT]
+> You need to check your `/lib/systemd/system/lxcfs.service` file for the presence of the `-l` option which makes `loadavg` retrieval working as expected. Here the required configuration:
+>
+> ```
+> [Unit]
+> Description=FUSE filesystem for LXC
+> ConditionVirtualization=!container
+> Before=lxc.service
+> Documentation=man:lxcfs(1)
+> 
+> [Service]
+> OOMScoreAdjust=-1000
+> ExecStartPre=/bin/mkdir -p /var/lib/lxcfs
+> # ExecStart=/usr/bin/lxcfs /var/lib/lxcfs
+> ExecStart=/usr/bin/lxcfs /var/lib/lxcfs -l
+> KillMode=process
+> Restart=on-failure
+> ExecStopPost=-/bin/fusermount -u /var/lib/lxcfs
+> Delegate=yes
+> ExecReload=/bin/kill -USR1 $MAINPID
+>
+> [Install]
+> WantedBy=multi-user.target
+> ```
+> 
+> Just update the `/lib/systemd/system/lxcfs.service` file, execute `systemctl daemon-realod && systemctl restart lxcfs` and when you are ready to apply the fix restart the LXC containers.
+> 
+> _Tnx to No-Pen9082 to point me out to that. [Here](https://forum.proxmox.com/threads/lxc-containers-shows-hosts-load-average.45724/page-2) the Proxmox forum thread on the topic._
+
+
 ## 📦 Components Overview
 
 ### 1. API Component
