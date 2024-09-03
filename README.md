@@ -2,207 +2,119 @@
 
 ![Platform](https://img.shields.io/badge/platform-Proxmox-green) ![Python Version](https://img.shields.io/badge/python-3.x-blue) ![Version](https://img.shields.io/badge/version-alpha-red)
 
+## 📚 Table of Contents
+
+- [Overview](#-overview)
+- [Key Features](#-key-features)
+- [System Requirements](#-system-requirements)
+- [Installation](#️-installation)
+- [Components Overview](#-components-overview)
+  - [API Component](#1-api-component)
+  - [Monitor Component](#2-monitor-component)
+  - [Model Component](#3-model-component)
+- [Usage and Control](#-usage-and-control)
+- [Monitoring and Alerts](#-monitoring-and-alerts)
+- [Documentation](#-documentation)
+- [Uninstallation](#-uninstallation)
+- [Contributing](#-contributing)
+- [License](#-license)
+
 ## 🎨 Overview
 
-**LXC AutoScale ML** is a sophisticated tool dedicated to managing LXC containers on Proxmox hosts, providing automatic scaling based on machine learning algorithms. It leverages Python's powerful data science libraries and provides an API-driven approach to dynamically adjust container resources according to real-time usage patterns, ensuring optimal performance and efficient resource allocation.
+**LXC AutoScale ML** is a tool designed to manage LXC containers on Proxmox hosts using machine learning for automatic scaling. It dynamically adjusts container resources to maintain optimal performance and efficient resource utilization.
 
 ### 🚀 Key Features
 
-- **Proxmox Host Integration**: Directly interfaces with Proxmox hosts, utilizing APIs and command-line tools for seamless LXC container management.
-- **Machine Learning-Driven Autoscaling**: Uses advanced machine learning models to predict and respond to resource demands.
-- **Modular Architecture**: Divided into three primary components: API, Monitor, and Model, each designed to handle specific aspects of autoscaling.
-- **Customizable Policies**: Define custom scaling rules and thresholds based on your environment's unique needs.
-- **Comprehensive Monitoring and Logging**: Real-time monitoring and detailed logs for auditing, debugging, and performance optimization.
+- **Proxmox Integration**: Seamless integration with Proxmox hosts via API and CLI.
+- **ML-Driven Autoscaling**: Utilizes machine learning models to predict and respond to resource demands.
+- **Modular Architecture**: Components (API, Monitor, Model) designed to handle specific autoscaling tasks.
+- **Customizable Policies**: Define custom scaling rules and thresholds.
+- **Real-Time Monitoring and Logging**: Provides detailed logs for auditing and optimization.
 
 ## 📋 System Requirements
 
-Before installing **LXC AutoScale ML**, ensure that your environment meets the following requirements:
-
-- **Proxmox Host**: Version 6.x or higher.
-- **Operating System**: Linux (Debian-based distributions preferred).
-- **Python**: Version 3.x.
-- **Required Packages**:
-  - `git`
-  - `python3-flask`
-  - `python3-requests`
-  - `python3-sklearn`
-  - `python3-pandas`
-  - `python3-numpy`
+- **Proxmox Host**: Version 6.x or higher
+- **Operating System**: Linux (Debian-based preferred)
+- **Python**: Version 3.x
+- **Dependencies**:
+  ```bash
+  git, python3-flask, python3-requests, python3-sklearn, python3-pandas, python3-numpy
+  ```
 
 ## 🛠️ Installation
 
-To install **LXC AutoScale ML**, execute the following command on your Proxmox host:
+To install **LXC AutoScale ML**, execute the following command:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-ml/main/install.sh | bash
 ```
 
-This installation script performs the following tasks:
-
-1. **System Check**: Verifies that all necessary software packages and dependencies are installed.
-2. **Download and Setup**: Retrieves the required files from the repository and configures the necessary directories and services.
-3. **Service Configuration**: Enables and starts all relevant services to handle API requests, monitor container metrics, and execute machine learning models.
-
 ### ⚠️ Prerequisites
 
-- Run the installation command with root or sudo privileges to ensure all configurations and installations are applied correctly.
-- Ensure your Proxmox server has internet access to download necessary files and packages.
+- **Root or Sudo Privileges**: Ensure the command is executed with appropriate privileges.
+- **Internet Access**: Required on the Proxmox server for downloading files and packages.
+
+**The installation script will:**
+
+1. **Verify System Requirements**: Ensures all necessary packages and dependencies are present.
+2. **Download & Set Up**: Retrieves the required files and configures services.
+3. **Enable Services**: Starts the API, monitoring, and ML model services.
 
 ## 📦 Components Overview
 
-**LXC AutoScale ML** consists of three main components:
-
-1. **API**: The backend service that provides endpoints for scaling operations, configuration management, and monitoring.
-2. **Monitor**: A dedicated service that tracks container performance metrics and triggers scaling decisions.
-3. **Model**: Machine learning models that analyze data and predict the optimal scaling actions to maintain performance and resource efficiency.
-
 ### 1. API Component
 
-The **API** component is the central control unit of **LXC AutoScale ML**. It exposes various RESTful endpoints to manage and interact with the autoscaling services.
+The **API** provides RESTful endpoints for managing autoscaling services.
 
-#### 📘 Key Features of the API
+#### 📘 Features
 
-- **Scaling Operations**: Endpoints to manually trigger upscaling or downscaling of containers based on predefined rules.
-- **Configuration Management**: APIs to dynamically update scaling configurations, such as thresholds, policies, and container groups.
-- **Monitoring and Health Checks**: Provides real-time metrics and health information for LXC containers.
-- **Audit Logging**: Logs all API interactions for security and auditing purposes.
+- **Scaling Operations**: Trigger container scaling manually.
+- **Configuration Management**: Dynamically update scaling configurations.
+- **Monitoring and Health Checks**: Access real-time metrics and system status.
+- **Audit Logging**: Logs all API interactions for security purposes.
 
 #### 📋 API Endpoints
 
-| Endpoint                      | Method | Description                                                      |
-|-------------------------------|--------|------------------------------------------------------------------|
-| `/api/v1/scale/up`            | POST   | Trigger upscaling of a specific container or group of containers. |
-| `/api/v1/scale/down`          | POST   | Trigger downscaling of a specific container or group.             |
-| `/api/v1/config/update`       | PUT    | Update the scaling configuration dynamically.                    |
-| `/api/v1/monitor/metrics`     | GET    | Fetch real-time metrics for all monitored containers.            |
-| `/api/v1/health`              | GET    | Check the health status of the API and connected services.        |
-
-#### 🔧 API Configuration
-
-The API configuration is stored in `lxc_autoscale_api.yaml`, located in `/etc/lxc_autoscale_ml/`. The configuration file includes parameters such as:
-
-- **API Port**: Port number for the API server.
-- **Authentication**: Credentials for accessing the API endpoints.
-- **Scaling Policies**: Rules and thresholds for container scaling.
-
-```yaml
-api:
-  port: 8080
-  auth:
-    username: "admin"
-    password: "password"
-scaling_policies:
-  default_cpu_threshold: 75
-  default_memory_threshold: 80
-  cooldown_period: 300
-```
+| Endpoint                   | Methods | Description                                             | Example                                                                                   |
+|----------------------------|---------|---------------------------------------------------------|-------------------------------------------------------------------------------------------|
+| `/scale/cores`             | POST    | Set the exact number of CPU cores for an LXC container.  | `curl -X POST http://proxmox:5000/scale/cores -H "Content-Type: application/json" -d '{"vm_id": 104, "cores": 4}'` |
+| `/scale/ram`               | POST    | Set the exact amount of RAM for an LXC container.        | `curl -X POST http://proxmox:5000/scale/ram -H "Content-Type: application/json" -d '{"vm_id": 104, "memory": 4096}'` |
+| `/scale/storage/increase`  | POST    | Increase the storage size of an LXC container's root filesystem. | `curl -X POST http://proxmox:5000/scale/storage/increase -H "Content-Type: application/json" -d '{"vm_id": 104, "disk_size": 2}'` |
+| `/snapshot/create`         | POST    | Create a snapshot for an LXC container.                  | `curl -X POST http://proxmox:5000/snapshot/create -H "Content-Type: application/json" -d '{"vm_id": 104, "snapshot_name": "my_snapshot"}'` |
+| `/snapshot/list`           | GET     | List all snapshots for an LXC container.                 | `curl -X GET "http://proxmox:5000/snapshot/list?vm_id=104"`                               |
+| `/snapshot/rollback`       | POST    | Rollback to a specific snapshot.                        | `curl -X POST http://proxmox:5000/snapshot/rollback -H "Content-Type: application/json" -d '{"vm_id": 104, "snapshot_name": "my_snapshot"}'` |
+| `/clone/create`            | POST    | Clone an LXC container.                                  | `curl -X POST http://proxmox:5000/clone/create -H "Content-Type: application/json" -d '{"vm_id": 104, "new_vm_id": 105, "new_vm_name": "cloned_container"}'` |
+| `/clone/delete`            | DELETE  | Delete a cloned LXC container.                           | `curl -X DELETE http://proxmox:5000/clone/delete -H "Content-Type: application/json" -d '{"vm_id": 105}'` |
+| `/resource/vm/status`      | GET     | Check the resource allocation and usage for an LXC container. | `curl -X GET "http://proxmox:5000/resource/vm/status?vm_id=104"`                        |
+| `/resource/node/status`    | GET     | Check the resource usage of a specific node.             | `curl -X GET "http://proxmox:5000/resource/node/status?node_name=proxmox"`                |
+| `/health/check`            | GET     | Perform a health check on the API server.                | `curl -X GET http://proxmox:5000/health/check`                                            |
+| `/routes`                  | GET     | List all available routes.                               | `curl -X GET http://proxmox:5000/routes`                                                  |
 
 ### 2. Monitor Component
 
-The **Monitor** component is a background service that continuously monitors the performance and resource utilization of LXC containers on the Proxmox host.
+The **Monitor** service continuously tracks the performance and resource usage of LXC containers.
 
-#### 📘 Key Features of the Monitor
+#### 📘 Features
 
-- **Real-Time Metrics Collection**: Captures CPU, memory, disk, and network usage statistics from each container.
-- **Anomaly Detection**: Identifies unusual patterns in resource usage, such as spikes in CPU or memory consumption.
-- **Threshold Alerts**: Triggers alerts or scaling actions when resource utilization exceeds predefined thresholds.
-- **Data Aggregation**: Aggregates metrics data over time for analysis and reporting.
-
-#### 🔧 Monitor Configuration
-
-The monitor configuration is stored in `lxc_monitor.yaml`, located in `/etc/lxc_autoscale_ml/`. Configuration parameters include:
-
-- **Polling Interval**: Time interval for collecting metrics data (in seconds).
-- **Alert Thresholds**: Thresholds for triggering alerts or scaling actions.
-- **Logging Level**: Defines the verbosity of logs generated by the monitor.
-
-```yaml
-monitor:
-  polling_interval: 60
-  alert_thresholds:
-    cpu: 85
-    memory: 90
-  logging:
-    level: INFO
-    path: "/var/log/lxc_autoscale_ml/monitor.log"
-```
-
-#### 📊 Real-Time Metrics and Alerts
-
-The monitor component integrates with the API to provide real-time metrics:
-
-- **CPU Usage**: Average and peak CPU usage per container.
-- **Memory Usage**: Total and available memory consumption.
-- **Disk I/O**: Read and write operations per second.
-- **Network Traffic**: Inbound and outbound data rates.
-
-Alerts can be sent via email, Slack, or other notification channels when critical thresholds are exceeded.
+- **Real-Time Metrics Collection**: Collects CPU, memory, disk, and network usage statistics.
+- **Anomaly Detection**: Detects unusual patterns in resource usage.
+- **Threshold Alerts**: Triggers alerts or scaling actions when predefined thresholds are exceeded.
+- **Data Aggregation**: Aggregates metrics for analysis and reporting.
 
 ### 3. Model Component
 
-The **Model** component utilizes machine learning algorithms to analyze the collected metrics and predict future resource demands. The model's primary goal is to determine when and how to scale the LXC containers to maintain optimal performance.
+The **Model** uses machine learning algorithms to analyze metrics and predict scaling needs.
 
-#### 📘 Key Features of the Model
+#### 📘 Features
 
-- **Anomaly Detection**: Detects anomalous behavior in container resource usage using models like `IsolationForest`.
-- **Predictive Scaling**: Uses historical data to predict when scaling actions will be necessary.
-- **Adaptive Learning**: Continuously improves the accuracy of predictions by learning from new data.
-- **Customizable Models**: Allows the use of different ML algorithms and parameters based on the specific environment.
+- **Anomaly Detection**: Uses `IsolationForest` to detect unusual usage patterns.
+- **Predictive Scaling**: Forecasts when scaling actions are necessary.
+- **Adaptive Learning**: Continuously refines predictions based on new data.
+- **Customizable Models**: Supports various ML algorithms and configurations.
 
-#### 🔍 Machine Learning Algorithms
+## 🔧 Usage and Control
 
-The current implementation uses a combination of `scikit-learn` models for scaling decisions:
-
-- **Isolation Forest**: For detecting anomalies and sudden spikes in usage.
-- **Linear Regression**: For predicting trends in resource consumption.
-- **Clustering Algorithms**: To group similar usage patterns and optimize scaling actions.
-
-#### 🔧 Model Configuration
-
-The model configuration is stored in `lxc_autoscale_ml.yaml`, located in `/etc/lxc_autoscale_ml/`. Configuration parameters include:
-
-- **Algorithm Parameters**: Specific parameters for the ML models, such as the number of estimators or contamination rates.
-- **Data Retention**: Duration for retaining historical data.
-- **Training Frequency**: How often the model retrains itself with new data.
-
-```yaml
-model:
-  algorithm: IsolationForest
-  parameters:
-    n_estimators: 100
-    contamination: 0.1
-  data_retention: 30  # days
-  training_frequency: 24  # hours
-```
-
-#### 📈 Machine Learning Pipeline
-
-Here’s an example of the machine learning pipeline used for scaling decisions:
-
-```python
-from sklearn.ensemble import IsolationForest
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
-
-pipeline = Pipeline([
-    ('scaler', StandardScaler()),
-    ('model', IsolationForest(n_estimators=100, contamination=0.1))
-])
-
-# Training the model
-pipeline.fit(training_data)
-
-# Predicting anomalies
-anomalies = pipeline.predict(new_data)
-```
-
-The pipeline is dynamically retrained based on new data collected by the monitor component.
-
-## 🔧 Usage and
-
- Control
-
-Once installed, you can manage the autoscaling services using the following systemd commands:
+Manage the autoscaling services with the following commands:
 
 - **Check Status**:
   ```bash
@@ -220,44 +132,37 @@ Once installed, you can manage the autoscaling services using the following syst
 
 ### 📊 Monitoring and Alerts
 
-- **Metrics Dashboard**: Integrate with tools like Grafana or Prometheus to visualize the metrics collected by the monitor.
-- **Alerting**: Configure alerts for critical events, such as sudden spikes in CPU or memory usage.
+- **Metrics Dashboard**: Integrate with tools like Grafana or Prometheus for visualization.
+- **Alerting**: Configure alerts for critical events, such as spikes in CPU or memory usage.
+
+## 📚 Documentation
+
+For detailed documentation, including advanced usage, configuration options, and troubleshooting, please refer to the [Extended Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/README.md).
 
 ## 🛠️ Uninstallation
 
-To uninstall **LXC AutoScale ML**, execute the following command on your Proxmox host:
+To uninstall **LXC AutoScale ML**, execute the following command:
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-ml/main/uninstall.sh | bash
 ```
 
+### ⚠️ Uninstallation Notes
+
+- The uninstallation script will remove all related files and configurations.
+- Ensure to back up any important data before proceeding.
+
 ## 📝 Contributing
 
-We welcome contributions to **LXC AutoScale ML**! Please follow these steps:
+We welcome contributions! Please follow these steps:
 
 1. **Fork** the repository.
-2. **Create** a new branch (`git checkout -b feature/your-feature`).
+2. **Create** a new branch (`git checkout -b feature/your-feature
+
+`).
 3. **Commit** your changes (`git commit -m 'Add your feature'`).
 4. **Push** to the branch (`git push origin feature/your-feature`).
 5. Open a **Pull Request**.
-
-### 🔧 Development Environment Setup
-
-To set up a development environment:
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml.git
-   cd proxmox-lxc-autoscale-ml
-   ```
-
-2. Install the necessary dependencies:
-   ```bash
-   sudo apt update
-   sudo apt install git python3 python3-flask python3-requests python3-sklearn python3-pandas python3-numpy
-   ```
-
-3. Run the services locally for testing and development.
 
 ## 🛡️ License
 
