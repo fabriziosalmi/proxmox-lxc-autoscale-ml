@@ -147,19 +147,16 @@ To uninstall **LXC AutoScale ML**, execute the following command:
 curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-ml/main/uninstall.sh | bash
 ```
 
-### ⚠️ Uninstallation Notes
-
-- The uninstallation script will remove all related files and configurations.
-- Ensure to back up any important data before proceeding.
+> [!WARNING]
+> The uninstallation script will remove all related files and configurations.
+> Ensure to back up any important data before proceeding.
 
 ## 📝 Contributing
 
 We welcome contributions! Please follow these steps:
 
 1. **Fork** the repository.
-2. **Create** a new branch (`git checkout -b feature/your-feature
-
-`).
+2. **Create** a new branch (`git checkout -b feature/your-feature`).
 3. **Commit** your changes (`git commit -m 'Add your feature'`).
 4. **Push** to the branch (`git push origin feature/your-feature`).
 5. Open a **Pull Request**.
