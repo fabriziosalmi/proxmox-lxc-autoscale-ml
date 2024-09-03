@@ -1,5 +1,9 @@
 # ✨ LXC AutoScale ML
 
+**LXC AutoScale ML** is a resource management daemon specifically designed for Proxmox environments. It automatically monitor resources and adjusts CPU and memory allocations with no downtime based on real-time usage metrics and predefined thresholds with the help of a machine learning pipeline.
+
+- **✅ Works with `Proxmox 8.2.4`**
+
 ![Platform](https://img.shields.io/badge/platform-Proxmox-green) ![Python Version](https://img.shields.io/badge/python-3.x-blue) ![Version](https://img.shields.io/badge/version-alpha-red)
 
 ## 📚 Table of Contents
