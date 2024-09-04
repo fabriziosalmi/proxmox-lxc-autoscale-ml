@@ -6,6 +6,11 @@
 
 ![Platform](https://img.shields.io/badge/platform-Proxmox-green) ![Python Version](https://img.shields.io/badge/python-3.x-blue) ![Version](https://img.shields.io/badge/version-alpha-red)
 
+
+![#alt](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_autoscale_ml.png?raw=true)
+
+
+
 > _LXC AutoScale ML in action :)_
 ```
 2024-08-20 13:07:56,393 [INFO] Data loaded successfully from /var/log/lxc_metrics.json.
