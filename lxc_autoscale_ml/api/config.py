@@ -2,7 +2,7 @@ import os
 import yaml
 from flask import Flask
 
-def load_config(config_file='/etc/lxc_autoscale/lxc_autoscale_api.yaml'):
+def load_config(config_file='/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml'):
     with open(config_file, 'r') as file:
         config = yaml.safe_load(file)
     return config
