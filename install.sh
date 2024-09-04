@@ -10,10 +10,10 @@ GREEN=$(tput setaf 2)
 RED=$(tput setaf 1)
 YELLOW=$(tput setaf 3)
 BLUE=$(tput setaf 4)
-CHECKMARK="\xE2\x9C\x85"  # ✔️ Success
-CROSSMARK="\xE2\x9D\x8C"  # ❌ Error
-WARNING="\xE2\x9A\xA0"    # ⚠️ Warning
-INFO="\xE2\x8F\xB3"       # ⏳ Info
+CHECKMARK="\xE2\x9C\x85"
+CROSSMARK="\xE2\x9D\x8C"
+WARNING="\xE2\x9A\xA0"
+INFO="\xE2\x8F\xB3"
 
 # Log function with emojis
 log() {
@@ -22,17 +22,7 @@ log() {
     local emoji="$3"
     local timestamp
     timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    case $level in
-        "INFO")
-            echo -e "${timestamp} [${GREEN}${level}${RESET}] ${emoji} ${message}" | tee -a "$LOGFILE"
-            ;;
-        "ERROR")
-            echo -e "${timestamp} [${RED}${level}${RESET}] ${emoji} ${message}" | tee -a "$LOGFILE"
-            ;;
-        "WARNING")
-            echo -e "${timestamp} [${YELLOW}${level}${RESET}] ${emoji} ${message}" | tee -a "$LOGFILE"
-            ;;
-    esac
+    echo -e "${timestamp} [${level}] ${emoji} ${message}" | tee -a "$LOGFILE"
 }
 
 # ASCII Art Header
@@ -48,7 +38,6 @@ header() {
 check_software() {
     log "INFO" "Checking for required software..." "$INFO"
 
-    # Check for Python3
     if ! command -v python3 &> /dev/null; then
         log "ERROR" "Python3 is not installed. Please install Python3 and rerun the script." "$CROSSMARK"
         exit 1
@@ -56,7 +45,6 @@ check_software() {
         log "INFO" "Python3 is installed." "$CHECKMARK"
     fi
 
-    # Install required system packages
     REQUIRED_SYSTEM_PACKAGES=("git" "python3-flask" "python3-requests" "python3-sklearn" "python3-pandas" "python3-numpy")
 
     for package in "${REQUIRED_SYSTEM_PACKAGES[@]}"; do
@@ -104,12 +92,9 @@ backup_files() {
 install_lxc_autoscale_ml() {
     log "INFO" "Installing LXC AutoScale ML..." "$INFO"
 
-    # Disable and stop lxc_autoscale if running. Don't use both at the same time
-    systemctl disable lxc_autoscale 2>/dev/null
-    systemctl stop lxc_autoscale 2>/dev/null
-
-    # Stop lxc_autoscale_ml if running
-    systemctl stop lxc_autoscale_ml 2>/dev/null
+    # Disable and stop services if running
+    systemctl disable lxc_autoscale_ml.service lxc_autoscale_api.service lxc_monitor.service 2>/dev/null
+    systemctl stop lxc_autoscale_ml.service lxc_autoscale_api.service lxc_monitor.service 2>/dev/null
 
     # Reload systemd
     systemctl daemon-reload
@@ -117,86 +102,40 @@ install_lxc_autoscale_ml() {
     # Create necessary directories
     mkdir -p /etc/lxc_autoscale_ml /usr/local/bin/lxc_autoscale_api /usr/local/bin/lxc_autoscale_ml
 
-    # Create empty __init__.py files to treat directories as Python packages
-    touch /usr/local/bin/lxc_autoscale_ml/__init__.py /usr/local/bin/lxc_autoscale_api/__init__.py
+    # Clone the repository
+    REPO_URL="https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml.git"
+    TEMP_DIR=$(mktemp -d)
 
-    # Helper function to download files
-    download_file() {
-        local url="$1"
-        local destination="$2"
-        if curl -sSL -o "$destination" "$url"; then
-            log "INFO" "Downloaded $url to $destination" "$CHECKMARK"
-        else
-            log "ERROR" "Failed to download $url" "$CROSSMARK"
-            exit 1
-        fi
-    }
+    log "INFO" "Cloning the repository from $REPO_URL..." "$INFO"
+    if git clone "$REPO_URL" "$TEMP_DIR"; then
+        log "INFO" "Successfully cloned the repository." "$CHECKMARK"
+    else
+        log "ERROR" "Failed to clone the repository." "$CROSSMARK"
+        exit 1
+    fi
 
-    # Helper function to set up services
-    setup_service() {
-        local service_name="$1"
-        if systemctl enable "$service_name" && systemctl start "$service_name"; then
-            log "INFO" "${CHECKMARK} Service $service_name started successfully!" "$CHECKMARK"
-        else
-            log "ERROR" "${CROSSMARK} Failed to start service $service_name." "$CROSSMARK"
-        fi
-    }
+    # Move files to the appropriate locations
+    log "INFO" "Moving files to their respective directories..." "$INFO"
 
-    # Download and install API application files
-    BASE_URL="https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-ml/main"
-    API_FILES=(
-        "api/lxc_autoscale_api.py"
-        "api/cloning_management.py"
-        "api/config.py"
-        "api/error_handling.py"
-        "api/health_check.py"
-        "api/lxc_management.py"
-        "api/resource_checking.py"
-        "api/scaling.py"
-        "api/snapshot_management.py"
-        "api/utils.py"
-    )
+    # Move API files
+    mv "$TEMP_DIR/lxc_autoscale_ml/api/"*.py /usr/local/bin/lxc_autoscale_api/
+    mv "$TEMP_DIR/lxc_autoscale_ml/api/lxc_autoscale_api.yaml" /etc/lxc_autoscale_ml/
 
-    for file in "${API_FILES[@]}"; do
-        download_file "$BASE_URL/$file" "/usr/local/bin/lxc_autoscale_api/$(basename $file)"
-    done
+    # Move Monitor files
+    mv "$TEMP_DIR/lxc_autoscale_ml/monitor/lxc_monitor.py" /usr/local/bin/
+    mv "$TEMP_DIR/lxc_autoscale_ml/monitor/lxc_monitor.yaml" /etc/lxc_autoscale_ml/
 
-    # Download and install the API configuration file
-    download_file "$BASE_URL/api/lxc_autoscale_api.yaml" "/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml"
+    # Move Model files
+    mv "$TEMP_DIR/lxc_autoscale_ml/model/"*.py /usr/local/bin/lxc_autoscale_ml/
+    mv "$TEMP_DIR/lxc_autoscale_ml/model/lxc_autoscale_ml.yaml" /etc/lxc_autoscale_ml/
 
-    # Download and install the monitor application files
-    download_file "$BASE_URL/monitor/lxc_monitor.py" "/usr/local/bin/lxc_monitor.py"
-    download_file "$BASE_URL/api/lxc_autoscale_api.yaml" "/etc/lxc_autoscale_ml/lxc_monitor.yaml"
+    # Move service unit files
+    mv "$TEMP_DIR/lxc_autoscale_ml/api/lxc_autoscale_api.service" /etc/systemd/system/
+    mv "$TEMP_DIR/lxc_autoscale_ml/monitor/lxc_monitor.service" /etc/systemd/system/
+    mv "$TEMP_DIR/lxc_autoscale_ml/model/lxc_autoscale_ml.service" /etc/systemd/system/
 
-    # Download and install model application files
-    MODEL_FILES=(
-        "model/config_manager.py"
-        "model/data_manager.py"
-        "model/lock_manager.py"
-        "model/logger.py"
-        "model/model.py"
-        "model/scaling.py"
-        "model/signal_handler.py"
-        "model/lxc_autoscale_ml.py"
-    )
-
-    for file in "${MODEL_FILES[@]}"; do
-        download_file "$BASE_URL/$file" "/usr/local/bin/lxc_autoscale_ml/$(basename $file)"
-    done
-
-    # Download and install the model configuration file
-    download_file "$BASE_URL/model/lxc_autoscale_ml.yaml" "/etc/lxc_autoscale_ml/lxc_autoscale_ml.yaml"
-
-    # Corrected URLs for the service files
-    SERVICE_FILES=(
-        "lxc_autoscale_ml/api/lxc_autoscale_api.service"
-        "lxc_autoscale_ml/model/lxc_autoscale_ml.service"
-        "lxc_autoscale_ml/monitor/lxc_monitor.service"
-    )
-
-    for file in "${SERVICE_FILES[@]}"; do
-        download_file "$BASE_URL/$file" "/etc/systemd/system/$(basename $file)"
-    done
+    # Clean up temporary directory
+    rm -rf "$TEMP_DIR"
 
     # Make the main scripts executable
     chmod +x /usr/local/bin/lxc_autoscale_ml/lxc_autoscale_ml.py
@@ -210,11 +149,17 @@ install_lxc_autoscale_ml() {
     setup_service "lxc_autoscale_api.service"
     setup_service "lxc_monitor.service"
     setup_service "lxc_autoscale_ml.service"
+}
 
-    # Show status for all installed services
-    systemctl status lxc_monitor.service --no-pager
-    systemctl status lxc_autoscale_api.service --no-pager
-    systemctl status lxc_autoscale_ml.service --no-pager
+# Helper function to set up services
+setup_service() {
+    local service_name="$1"
+    if systemctl enable "$service_name" && systemctl start "$service_name"; then
+        log "INFO" "${CHECKMARK} Service $service_name started successfully!" "$CHECKMARK"
+    else
+        log "ERROR" "${CROSSMARK} Failed to start service $service_name." "$CROSSMARK"
+        systemctl status "$service_name" --no-pager
+    fi
 }
 
 # Main script execution
