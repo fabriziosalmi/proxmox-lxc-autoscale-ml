@@ -48,18 +48,6 @@ LXC AutoScale ML offers a suite of powerful features designed to enhance the man
 
 ---
 
-## Quick Start
-
-Getting started with LXC AutoScale ML on your Proxmox host is quick and simple:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale/main/install.sh | bash
-```
-
-Select option 2 and you're done.
-
----
-
 ## Configuration
 
 The `lxc_autoscale_ml.yaml` configuration file allows you to customize various aspects of the LXC AutoScale ML service. Below is an example configuration file with explanations:
