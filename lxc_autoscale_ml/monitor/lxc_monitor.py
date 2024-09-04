@@ -240,15 +240,19 @@ async def collect_and_export_metrics():
 
     logger.debug(f"Found {len(containers)} running containers.")
 
-    async with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-        if PARALLEL_PROCESSING:
-            tasks = [collect_metrics_for_container(container_id, executor) for container_id in containers]
-            results = await asyncio.gather(*tasks)
-        else:
-            results = []
-            for container_id in containers:
-                result = await collect_metrics_for_container(container_id, executor)
-                results.append(result)
+    executor = ThreadPoolExecutor(max_workers=MAX_WORKERS)
+    loop = asyncio.get_event_loop()
+    
+    if PARALLEL_PROCESSING:
+        tasks = [collect_metrics_for_container(container_id, executor) for container_id in containers]
+        results = await asyncio.gather(*tasks)
+    else:
+        results = []
+        for container_id in containers:
+            result = await collect_metrics_for_container(container_id, executor)
+            results.append(result)
+    
+    executor.shutdown(wait=True)  # Properly shutdown the executor after usage
 
     # Ensure results are processed correctly
     for container_id, container_metrics in results:
