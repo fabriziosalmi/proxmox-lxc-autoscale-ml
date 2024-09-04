@@ -6,7 +6,7 @@
 
 - **[Overview](#overview)**: Introduction to LXC Monitor and its core functionality.
 - **[Features](#features)**: A detailed list of what LXC Monitor tracks and monitors.
-- **[Installation and Setup](#installation-and-setup)**: Step-by-step guide to installing and configuring LXC Monitor.
+- **[Setup](#setup)**: Step-by-step guide to configure LXC Monitor.
   - [Prerequisites](#1-prerequisites)
   - [Configuration](#2-configuration)
   - [Service Configuration](#3-service-configuration)
@@ -41,7 +41,7 @@ LXC Monitor offers a robust set of features that cover all critical aspects of c
 
 ---
 
-## Installation and Setup
+## Setup
 
 Setting up LXC Monitor involves ensuring that your system meets the prerequisites, configuring the service, and installing it. Below is a detailed guide to help you get started.
 
@@ -133,30 +133,6 @@ WantedBy=multi-user.target
 - **StandardOutput** and **StandardError**: Ensure that output and errors are handled correctly by systemd.
 - **Restart**: Configures the service to restart automatically on failure.
 - **EnvironmentFile**: Points to the configuration file for environment variables.
-
-### 4. Installation
-
-To install LXC Monitor, follow these steps:
-
-1. **Place the Python Script**: Move the `lxc_monitor.py` script to `/usr/local/bin/`:
-   ```bash
-   sudo cp lxc_monitor.py /usr/local/bin/
-   ```
-
-2. **Reload systemd**: Reload systemd to recognize the new service:
-   ```bash
-   sudo systemctl daemon-reload
-   ```
-
-3. **Enable and Start the Service**: Enable the service to start at boot and start it immediately:
-   ```bash
-   sudo systemctl enable lxc_monitor.service
-   sudo systemctl start lxc_monitor.service
-   ```
-
-This completes the installation process, and the service should now be running and monitoring your LXC containers.
-
----
 
 ## Usage
 
