@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import aiofiles
 
 # Load configuration from YAML file
-with open("/etc/lxc_autoscale/lxc_monitor.yaml", 'r') as config_file:
+with open("/etc/lxc_autoscale_ml/lxc_monitor.yaml", 'r') as config_file:
     config = yaml.safe_load(config_file)
 
 # Set up logging configuration
