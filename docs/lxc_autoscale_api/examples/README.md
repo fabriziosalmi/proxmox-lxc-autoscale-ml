@@ -2,35 +2,49 @@
 
 The LXC AutoScale API offers powerful capabilities for managing and automating LXC containers on a Proxmox server. By leveraging this API, you can dynamically adjust resources, automate routine tasks, and ensure your containers are running optimally based on real-time conditions. Below are practical examples of how you can use the API to enhance your container management. Each example provides a detailed command that you can implement directly in your environment.
 
+To improve readability and make it easier for readers to quickly find the most interesting points, I suggest organizing the summary section into logical groups based on the nature of the actions being automated. Here's a revised version with subsections:
+
 ## Summary
 
+### Resource Scaling
 - [Dynamic CPU Scaling](#dynamic-cpu-scaling): Adjust CPU cores based on time of day.
 - [Automated Memory Management](#automated-memory-management): Increase or decrease RAM allocation based on workload demand.
 - [Scheduled Storage Expansion](#scheduled-storage-expansion): Automatically expand storage before a large data import.
-- [Daily Snapshot Creation](#daily-snapshot-creation): Create a daily snapshot for quick recovery.
-- [Snapshot Rollback for Recovery](#snapshot-rollback-for-recovery): Rollback to a snapshot if issues arise.
-- [On-Demand Container Cloning](#on-demand-container-cloning): Clone a container for testing purposes.
-- [Clean Up Cloned Containers](#clean-up-cloned-containers): Delete a cloned container after testing.
+- [Temporary Resource Boost for Maintenance](#temporary-resource-boost-for-maintenance): Temporarily increase resources before maintenance.
+- [Preemptive Resource Scaling](#preemptive-resource-scaling): Automatically scale resources if CPU usage exceeds a threshold.
+- [Periodic Resource Scaling Based on Historical Data](#periodic-resource-scaling-based-on-historical-data): Scale resources based on historical usage trends.
+- [Pre-Scaling for High-Traffic Events](#pre-scaling-for-high-traffic-events): Increase resources before an anticipated high-traffic event.
+- [Automatic Downgrade After Off-Peak](#automatic-downgrade-after-off-peak): Downgrade resources after an off-peak period.
+
+### Monitoring and Alerts
 - [Monitor Container Resources](#monitor-container-resources): Regularly check and log container resource usage.
 - [Node Resource Usage Monitoring](#node-resource-usage-monitoring): Track resource usage of a Proxmox node.
 - [Automated Health Check](#automated-health-check): Perform regular health checks on the API server.
-- [Document Available API Routes](#document-available-api-routes): List all available API routes.
-- [Temporary Resource Boost for Maintenance](#temporary-resource-boost-for-maintenance): Temporarily increase resources before maintenance.
-- [Preemptive Resource Scaling](#preemptive-resource-scaling): Automatically scale resources if CPU usage exceeds a threshold.
-- [Automate Cleanup Tasks](#automate-cleanup-tasks): Remove old snapshots and logs to save space.
-- [Rolling Snapshot Backup](#rolling-snapshot-backup): Maintain a rolling backup by keeping only the last 7 snapshots.
-- [Real-Time Traffic-Based Scaling](#real-time-traffic-based-scaling): Scale up resources dynamically based on network traffic.
-- [Clone and Test Environment](#clone-and-test-environment): Automatically clone and delete a test environment.
 - [Monitor and Alert on Resource Thresholds](#monitor-and-alert-on-resource-thresholds): Set up monitoring and alerting for resource usage.
-- [Health Check and Restart Unresponsive Containers](#health-check-and-restart-unresponsive-containers): Automatically restart a container if it becomes unresponsive.
-- [Daily Performance Reports](#daily-performance-reports): Generate and send daily container performance reports.
-- [Automated Pre-Deployment Snapshots](#automated-pre-deployment-snapshots): Create a snapshot before deploying changes.
-- [Automatic Node Resource Balancing](#automatic-node-resource-balancing): Rebalance resources across nodes based on usage.
-- [Log Cleanup Automation](#log-cleanup-automation): Automatically clean up logs to save disk space.
-- [Periodic Resource Scaling Based on Historical Data](#periodic-resource-scaling-based-on-historical-data): Scale resources based on historical usage trends.
-- [Pre-Scaling for High-Traffic Events](#pre-scaling-for-high-traffic-events): Increase resources before an anticipated high-traffic event.
 - [Real-Time Usage Alerts](#real-time-usage-alerts): Set up real-time alerts for CPU or memory usage thresholds.
-- [Automatic Downgrade After Off-Peak](#automatic-downgrade-after-off-peak): Downgrade resources after an off-peak period.
+
+### Backup and Recovery
+- [Daily Snapshot Creation](#daily-snapshot-creation): Create a daily snapshot for quick recovery.
+- [Snapshot Rollback for Recovery](#snapshot-rollback-for-recovery): Rollback to a snapshot if issues arise.
+- [Rolling Snapshot Backup](#rolling-snapshot-backup): Maintain a rolling backup by keeping only the last 7 snapshots.
+- [Automated Pre-Deployment Snapshots](#automated-pre-deployment-snapshots): Create a snapshot before deploying changes.
+
+### Cloning and Testing
+- [On-Demand Container Cloning](#on-demand-container-cloning): Clone a container for testing purposes.
+- [Clean Up Cloned Containers](#clean-up-cloned-containers): Delete a cloned container after testing.
+- [Clone and Test Environment](#clone-and-test-environment): Automatically clone and delete a test environment.
+
+### Maintenance and Cleanup
+- [Automate Cleanup Tasks](#automate-cleanup-tasks): Remove old snapshots and logs to save space.
+- [Log Cleanup Automation](#log-cleanup-automation): Automatically clean up logs to save disk space.
+- [Automatic Node Resource Balancing](#automatic-node-resource-balancing): Rebalance resources across nodes based on usage.
+
+### Reporting
+- [Daily Performance Reports](#daily-performance-reports): Generate and send daily container performance reports.
+- [Document Available API Routes](#document-available-api-routes): List all available API routes.
+
+### Health and Stability
+- [Health Check and Restart Unresponsive Containers](#health-check-and-restart-unresponsive-containers): Automatically restart a container if it becomes unresponsive.
 
 ---
 
