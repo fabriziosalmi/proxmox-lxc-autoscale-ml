@@ -58,7 +58,7 @@ Before installing LXC Monitor, make sure your system meets the following require
 
 ### 2. Configuration
 
-Create the main configuration file at `/etc/lxc_monitor/lxc_monitor.yaml`. This file will define how the monitoring service operates, including where to log information and how often to check for metrics.
+Create the main configuration file at `/etc/lxc_autoscale_ml/lxc_monitor.yaml`. This file will define how the monitoring service operates, including where to log information and how often to check for metrics.
 
 #### Example Configuration:
 
