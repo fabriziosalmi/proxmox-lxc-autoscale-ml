@@ -27,10 +27,14 @@ log() {
 
 # ASCII Art Header
 header() {
-    echo -e "\n${BLUE}${BOLD}🎨 LXC AutoScale ML Installer${RESET}"
-    echo "============================="
+    echo -e "\n${BLUE}${BOLD}"
+    echo "==================================="
+    echo " 🎨 LXC AutoScale ML Installer 🎨 "
+    echo "==================================="
+    echo -e "${RESET}"
     echo "Welcome to the LXC AutoScale ML installation script!"
-    echo "============================="
+    echo "This script will guide you through the setup process."
+    echo "==================================="
     echo
 }
 
@@ -52,11 +56,11 @@ check_software() {
             log "INFO" "System package $package is already installed." "$CHECKMARK"
         else
             log "INFO" "Installing system package: $package..." "$INFO"
-            if ! apt update && apt install -y "$package"; then
+            if apt update && apt install -y "$package"; then
+                log "INFO" "Successfully installed $package." "$CHECKMARK"
+            else
                 log "ERROR" "Failed to install $package." "$CROSSMARK"
                 exit 1
-            else
-                log "INFO" "Successfully installed $package." "$CHECKMARK"
             fi
         fi
     done
@@ -115,32 +119,10 @@ install_lxc_autoscale_ml() {
     fi
 
     # Move files to the appropriate locations
-    log "INFO" "Moving files to their respective directories..." "$INFO"
-
-    # Move API files
-    mv "$TEMP_DIR/lxc_autoscale_ml/api/"*.py /usr/local/bin/lxc_autoscale_api/
-    mv "$TEMP_DIR/lxc_autoscale_ml/api/lxc_autoscale_api.yaml" /etc/lxc_autoscale_ml/
-
-    # Move Monitor files
-    mv "$TEMP_DIR/lxc_autoscale_ml/monitor/lxc_monitor.py" /usr/local/bin/
-    mv "$TEMP_DIR/lxc_autoscale_ml/monitor/lxc_monitor.yaml" /etc/lxc_autoscale_ml/
-
-    # Move Model files
-    mv "$TEMP_DIR/lxc_autoscale_ml/model/"*.py /usr/local/bin/lxc_autoscale_ml/
-    mv "$TEMP_DIR/lxc_autoscale_ml/model/lxc_autoscale_ml.yaml" /etc/lxc_autoscale_ml/
-
-    # Move service unit files
-    mv "$TEMP_DIR/lxc_autoscale_ml/api/lxc_autoscale_api.service" /etc/systemd/system/
-    mv "$TEMP_DIR/lxc_autoscale_ml/monitor/lxc_monitor.service" /etc/systemd/system/
-    mv "$TEMP_DIR/lxc_autoscale_ml/model/lxc_autoscale_ml.service" /etc/systemd/system/
+    move_files "$TEMP_DIR"
 
     # Clean up temporary directory
     rm -rf "$TEMP_DIR"
-
-    # Make the main scripts executable
-    chmod +x /usr/local/bin/lxc_autoscale_ml/lxc_autoscale_ml.py
-    chmod +x /usr/local/bin/lxc_autoscale_api/lxc_autoscale_api.py
-    chmod +x /usr/local/bin/lxc_monitor.py
 
     # Reload systemd to recognize the new services
     systemctl daemon-reload
@@ -149,6 +131,27 @@ install_lxc_autoscale_ml() {
     setup_service "lxc_autoscale_api.service"
     setup_service "lxc_monitor.service"
     setup_service "lxc_autoscale_ml.service"
+}
+
+# Function to move files to their respective directories
+move_files() {
+    local source_dir="$1"
+
+    log "INFO" "Moving files to their respective directories..." "$INFO"
+
+    mv "$source_dir/lxc_autoscale_ml/api/"*.py /usr/local/bin/lxc_autoscale_api/
+    mv "$source_dir/lxc_autoscale_ml/api/lxc_autoscale_api.yaml" /etc/lxc_autoscale_ml/
+    mv "$source_dir/lxc_autoscale_ml/monitor/lxc_monitor.py" /usr/local/bin/
+    mv "$source_dir/lxc_autoscale_ml/monitor/lxc_monitor.yaml" /etc/lxc_autoscale_ml/
+    mv "$source_dir/lxc_autoscale_ml/model/"*.py /usr/local/bin/lxc_autoscale_ml/
+    mv "$source_dir/lxc_autoscale_ml/model/lxc_autoscale_ml.yaml" /etc/lxc_autoscale_ml/
+    mv "$source_dir/lxc_autoscale_ml/api/lxc_autoscale_api.service" /etc/systemd/system/
+    mv "$source_dir/lxc_autoscale_ml/monitor/lxc_monitor.service" /etc/systemd/system/
+    mv "$source_dir/lxc_autoscale_ml/model/lxc_autoscale_ml.service" /etc/systemd/system/
+
+    chmod +x /usr/local/bin/lxc_autoscale_ml/lxc_autoscale_ml.py
+    chmod +x /usr/local/bin/lxc_autoscale_api/lxc_autoscale_api.py
+    chmod +x /usr/local/bin/lxc_monitor.py
 }
 
 # Helper function to set up services
