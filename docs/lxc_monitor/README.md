@@ -121,7 +121,7 @@ User=root
 
 # Logging configuration
 Environment="PYTHONUNBUFFERED=1"
-EnvironmentFile=/etc/lxc_monitor.yaml
+EnvironmentFile=/etc/lxc_autoscale_ml/lxc_monitor.yaml
 
 [Install]
 WantedBy=multi-user.target
