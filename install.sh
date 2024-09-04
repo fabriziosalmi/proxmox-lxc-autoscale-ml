@@ -187,11 +187,11 @@ install_lxc_autoscale_ml() {
     # Download and install the model configuration file
     download_file "$BASE_URL/model/lxc_autoscale_ml.yaml" "/etc/lxc_autoscale_ml/lxc_autoscale_ml.yaml"
 
-    # Download and install systemd service files
+    # Corrected URLs for the service files
     SERVICE_FILES=(
-        "model/lxc_autoscale_ml.service"
-        "api/lxc_autoscale_api.service"
-        "monitor/lxc_monitor.service"
+        "lxc_autoscale_ml/api/lxc_autoscale_api.service"
+        "lxc_autoscale_ml/model/lxc_autoscale_ml.service"
+        "lxc_autoscale_ml/monitor/lxc_monitor.service"
     )
 
     for file in "${SERVICE_FILES[@]}"; do
