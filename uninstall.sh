@@ -75,10 +75,7 @@ if [ -d "/etc/lxc_autoscale_ml" ] && [ ! "$(ls -A /etc/lxc_autoscale_ml)" ]; the
     log "INFO" "${CHECKMARK} Successfully removed empty directory /etc/lxc_autoscale_ml."
 fi
 
-# Uninstall required libraries
-apt remove python3-flask python3-requests python3-sklearn python3-pandas python3-numpy -y
-
-# Final cleanup
+# Reload systemd to reflect changes
 log "INFO" "Reloading systemd daemon to reflect changes..."
 systemctl daemon-reload
 
