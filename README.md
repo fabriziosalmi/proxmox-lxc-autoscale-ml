@@ -38,9 +38,9 @@
 - [Usage and Control](#-usage-and-control)
 - [Monitoring and Alerts](#-monitoring-and-alerts)
 - [Documentation](#-documentation)
-- [Uninstallation](#-uninstallation)
+- [Uninstallation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml?tab=readme-ov-file#%EF%B8%8F-uninstallation)
 - [Contributing](#-contributing)
-- [License](#-license)
+- [License](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/LICENSE)
 
 ## 🎨 Overview
 
