@@ -52,9 +52,7 @@ The LXC AutoScale API provides a range of endpoints that allow you to interact w
 - **`/scale/cores`**: Allows you to set a specific number of CPU cores for a container. This is useful for adjusting resources based on the time of day or anticipated workload.
 - **`/scale/ram`**: Lets you set the amount of RAM for a container. This can be used to allocate more memory during peak usage or reduce it during off-hours to save resources.
 - **`/scale/storage/increase`**: Increases the storage size of the container’s root filesystem. This endpoint is particularly useful when a container’s storage requirements grow over time.
-- **`/snapshot/create`**: Creates a snapshot of a container. Snapshots are essential for backup and recovery, allowing you to restore a container to a
-
- previous state if needed.
+- **`/snapshot/create`**: Creates a snapshot of a container. Snapshots are essential for backup and recovery, allowing you to restore a container to a previous state if needed.
 - **`/snapshot/list`**: Lists all snapshots for a given container. This endpoint helps you manage and review the available snapshots.
 - **`/snapshot/rollback`**: Rolls back a container to a specific snapshot. Use this endpoint to revert changes made during the day or after testing new configurations.
 - **`/clone/create`**: Clones a container, creating an exact copy under a new VM ID. This is ideal for testing or duplicating environments without affecting the original container.
