@@ -61,7 +61,7 @@
 - **Python**: Version 3.x
 - **Dependencies**:
   ```bash
-  git, python3-flask, python3-requests, python3-sklearn, python3-pandas, python3-numpy
+  git, python3-flask, python3-requests, python3-sklearn, python3-pandas, python3-numpy, python3-aiofiles
   ```
 
 ## 🛠️ Installation

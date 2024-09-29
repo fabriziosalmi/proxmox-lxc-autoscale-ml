@@ -49,7 +49,7 @@ check_software() {
         log "INFO" "Python3 is installed." "$CHECKMARK"
     fi
 
-    REQUIRED_SYSTEM_PACKAGES=("git" "python3-flask" "python3-requests" "python3-sklearn" "python3-pandas" "python3-numpy")
+    REQUIRED_SYSTEM_PACKAGES=("git" "python3-flask" "python3-requests" "python3-sklearn" "python3-pandas" "python3-numpy" "python3-aiofiles")
 
     for package in "${REQUIRED_SYSTEM_PACKAGES[@]}"; do
         if dpkg -l | grep -qw "$package"; then
