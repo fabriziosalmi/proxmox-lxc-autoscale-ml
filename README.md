@@ -214,6 +214,11 @@ We welcome contributions! Please follow these steps:
 4. **Push** to the branch (`git push origin feature/your-feature`).
 5. Open a **Pull Request**.
 
+## Disclaimer
+
+> [!CAUTION]
+> I am not responsible for any potential damage or issues that may arise from using this tool. 
+
 ## 🛡️ License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
