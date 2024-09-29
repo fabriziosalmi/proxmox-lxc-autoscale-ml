@@ -108,7 +108,7 @@ curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-
 > WantedBy=multi-user.target
 > ```
 > 
-> Just update the `/lib/systemd/system/lxcfs.service` file, execute `systemctl daemon-realod && systemctl restart lxcfs` and when you are ready to apply the fix restart the LXC containers.
+> Just update the `/lib/systemd/system/lxcfs.service` file, execute `systemctl daemon-reload && systemctl restart lxcfs` and when you are ready to apply the fix restart the LXC containers.
 > 
 > _Tnx to No-Pen9082 to point me out to that. [Here](https://forum.proxmox.com/threads/lxc-containers-shows-hosts-load-average.45724/page-2) the Proxmox forum thread on the topic._
 
