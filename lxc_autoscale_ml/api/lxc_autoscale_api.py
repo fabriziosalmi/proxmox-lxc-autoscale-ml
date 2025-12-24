@@ -263,6 +263,23 @@ def check_vm_status_route():
     logging.info(f"Checking status for VM {vm_id}")
     return check_vm_status(vm_id)
 
+@app.route('/resource/vm/config', methods=['GET'])
+@rate_limit
+def get_vm_config_route():
+    """Get current CPU cores and RAM configuration for a container"""
+    vm_id = request.args.get('vm_id')
+    logging.info(f"Getting configuration for VM {vm_id}")
+    try:
+        lxc_manager = LXCManager()
+        cores, memory = lxc_manager.get_current_resources(vm_id)
+        return create_response(
+            data={"vm_id": vm_id, "cores": cores, "memory_mb": memory},
+            message=f"Successfully retrieved configuration for VM {vm_id}",
+            status_code=200
+        )
+    except Exception as e:
+        return handle_error(e)
+
 @app.route('/resource/node/status', methods=['GET'])
 @rate_limit
 def check_node_status_route():

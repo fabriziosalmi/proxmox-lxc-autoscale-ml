@@ -74,6 +74,21 @@ class LXCManager:
                 current_size = line.split(",")[1].replace("size=", "").replace("G", "").strip()
                 return int(current_size)
         raise Exception("Failed to retrieve current disk size")
+    
+    def get_current_resources(self, vm_id):
+        """Retrieve current CPU cores and memory (MB) for a container"""
+        command = f"pct config {vm_id}"
+        output = self._run_command(command)
+        cores = None
+        memory = None
+        for line in output.splitlines():
+            if line.startswith("cores:"):
+                cores = int(line.split(":")[1].strip())
+            elif line.startswith("memory:"):
+                memory = int(line.split(":")[1].strip())
+        if cores is None or memory is None:
+            raise Exception(f"Failed to retrieve current resources for container {vm_id}")
+        return cores, memory
 
     def resize_storage(self, vm_id, disk_size):
         current_size = self.get_current_disk_size(vm_id)

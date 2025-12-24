@@ -30,11 +30,14 @@ def determine_scaling_action(latest_metrics, scaling_decision, confidence, confi
     cpu_thresholds = config["scaling"]
     ram_thresholds = config["scaling"]
 
-    if scaling_decision:
-        logging.debug("Anomaly detected. Scaling up CPU and RAM.")
-        cpu_action = "Scale Up"
-        ram_action = "Scale Up"
-    else:
+    # IsolationForest returns -1 for anomalies (outliers), 1 for normal points
+    # Anomalies (-1) indicate unusual resource patterns that may need scaling
+    if scaling_decision == -1:
+        logging.debug("Anomaly detected. Evaluating for potential scaling based on thresholds.")
+        # Don't automatically scale up on anomaly - evaluate thresholds below
+    
+    # Check threshold-based scaling regardless of anomaly detection
+    if True:
         if cpu_usage > cpu_thresholds["cpu_scale_up_threshold"]:
             cpu_action = "Scale Up"
             logging.debug(f"CPU usage {cpu_usage}% exceeds the scale-up threshold.")
@@ -49,16 +52,24 @@ def determine_scaling_action(latest_metrics, scaling_decision, confidence, confi
             ram_action = "Scale Down"
             logging.debug(f"Memory usage {memory_usage}MB is below the scale-down threshold.")
 
-    # Ensure scaling stays within limits
+    # Get current resources from the container
+    current_cores = latest_metrics.get("current_cores", cpu_thresholds.get("min_cpu_cores", 2))
+    current_ram = latest_metrics.get("current_ram_mb", ram_thresholds.get("min_ram_mb", 1024))
+    
+    # Calculate incremental scaling steps
+    cpu_step = cpu_thresholds.get("cpu_scale_step", 1)  # Scale by 1 core at a time by default
+    ram_step = ram_thresholds.get("ram_scale_step_mb", 512)  # Scale by 512MB at a time by default
+    
+    # Ensure scaling stays within limits with incremental changes
     if cpu_action == "Scale Up":
-        new_cores = min(cpu_thresholds["total_cores"], cpu_thresholds["max_cpu_cores"])
+        new_cores = min(current_cores + cpu_step, cpu_thresholds["max_cpu_cores"])
     elif cpu_action == "Scale Down":
-        new_cores = max(cpu_thresholds["min_cpu_cores"], cpu_thresholds["min_cpu_cores"])
+        new_cores = max(current_cores - cpu_step, cpu_thresholds["min_cpu_cores"])
     
     if ram_action == "Scale Up":
-        new_ram = min(ram_thresholds["total_ram_mb"], ram_thresholds["max_ram_mb"])
+        new_ram = min(current_ram + ram_step, ram_thresholds["max_ram_mb"])
     elif ram_action == "Scale Down":
-        new_ram = max(ram_thresholds["min_ram_mb"], ram_thresholds["min_ram_mb"])
+        new_ram = max(current_ram - ram_step, ram_thresholds["min_ram_mb"])
 
     logging.debug(f"Final scaling actions: CPU -> {cpu_action}, RAM -> {ram_action} | Confidence: {confidence}%")
     return cpu_action, ram_action, new_cores, new_ram

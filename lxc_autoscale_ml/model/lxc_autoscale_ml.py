@@ -47,7 +47,26 @@ def main():
             # Iterate over each container and make scaling decisions
             for container_id in df["container_id"].unique():
                 container_data = df[df["container_id"] == container_id]
-                latest_metrics = container_data.iloc[-1]
+                latest_metrics = container_data.iloc[-1].copy()
+
+                # Fetch current CPU and RAM configuration from API
+                try:
+                    import requests
+                    api_url = config["api"]["api_url"]
+                    response = requests.get(f"{api_url}/resource/vm/config?vm_id={container_id}", timeout=5)
+                    if response.status_code == 200:
+                        vm_config = response.json().get("data", {})
+                        latest_metrics["current_cores"] = vm_config.get("cores", config["scaling"]["min_cpu_cores"])
+                        latest_metrics["current_ram_mb"] = vm_config.get("memory_mb", config["scaling"]["min_ram_mb"])
+                        logging.debug(f"Container {container_id} current config: {vm_config.get('cores')} cores, {vm_config.get('memory_mb')} MB RAM")
+                    else:
+                        logging.warning(f"Could not fetch config for container {container_id}, using defaults")
+                        latest_metrics["current_cores"] = config["scaling"]["min_cpu_cores"]
+                        latest_metrics["current_ram_mb"] = config["scaling"]["min_ram_mb"]
+                except Exception as e:
+                    logging.warning(f"Error fetching config for container {container_id}: {e}, using defaults")
+                    latest_metrics["current_cores"] = config["scaling"]["min_cpu_cores"]
+                    latest_metrics["current_ram_mb"] = config["scaling"]["min_ram_mb"]
 
                 logging.debug(f"Latest metrics for container {container_id}: {latest_metrics.to_dict()}")
 

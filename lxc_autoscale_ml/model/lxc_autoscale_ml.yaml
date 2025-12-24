@@ -48,6 +48,8 @@ scaling:
   max_ram_mb: 8192  # Maximum RAM to maintain per container in MB
   min_cpu_cores: 2  # Minimum number of CPU cores to maintain per container
   min_ram_mb: 1024  # Minimum RAM to maintain per container in MB
+  cpu_scale_step: 1  # Number of CPU cores to add/remove per scaling action
+  ram_scale_step_mb: 512  # Amount of RAM in MB to add/remove per scaling action
   cpu_scale_up_threshold: 75  # CPU usage percentage to trigger scale-up
   cpu_scale_down_threshold: 30  # CPU usage percentage to trigger scale-down
   ram_scale_up_threshold: 75  # RAM usage percentage to trigger scale-up
