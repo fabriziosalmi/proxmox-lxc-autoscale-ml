@@ -5,7 +5,7 @@ All notable changes to the LXC AutoScale ML project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2024-12-24
+## [1.2.0] - 2025-12-24
 
 Major release with critical bug fixes, performance improvements, and new enterprise features.
 
