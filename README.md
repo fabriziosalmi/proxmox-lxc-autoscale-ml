@@ -1,17 +1,14 @@
-# ✨ LXC AutoScale ML
+# LXC AutoScale ML
 
-**LXC AutoScale ML** is a resource management daemon specifically designed for Proxmox environments. It automatically monitor resources and adjusts CPU and memory allocations with no downtime based on real-time usage metrics and predefined thresholds with the help of a machine learning pipeline.
+**LXC AutoScale ML** is a resource management daemon for Proxmox environments. It monitors LXC container resources and adjusts CPU and memory allocations with zero downtime, using machine learning to predict resource demands.
 
-- **✅ Works with `Proxmox 8.2.4`**
+**Tested with Proxmox VE 8.2.4**
 
-![Platform](https://img.shields.io/badge/platform-Proxmox-green) ![Python Version](https://img.shields.io/badge/python-3.x-blue) ![Version](https://img.shields.io/badge/version-alpha-red)
+![Platform](https://img.shields.io/badge/platform-Proxmox-green) ![Python Version](https://img.shields.io/badge/python-3.x-blue) ![License](https://img.shields.io/badge/license-MIT-blue)
 
+![LXC AutoScale ML Architecture](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_autoscale_ml.png?raw=true)
 
-![#alt](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_autoscale_ml.png?raw=true)
-
-
-
-> _LXC AutoScale ML in action :)_
+**Example output:**
 ```
 2024-08-20 13:07:56,393 [INFO] Data loaded successfully from /var/log/lxc_metrics.json.
 2024-08-20 13:07:56,399 [INFO] Data preprocessed successfully.
@@ -25,28 +22,25 @@
 2024-08-20 13:07:57,916 [INFO] Sleeping for 60 seconds before the next run.
 ```
 
-## 📚 Table of Contents
+## Table of Contents
 
-- [Overview](#-overview)
-- [Key Features](#-key-features)
-- [System Requirements](#-system-requirements)
-- [Installation](#️-installation)
-- [Components Overview](#-components-overview)
-  - [API Component](#1-api-component)
-  - [Monitor Component](#2-monitor-component)
-  - [Model Component](#3-model-component)
-- [Usage and Control](#-usage-and-control)
-- [Monitoring and Alerts](#-monitoring-and-alerts)
-- [Documentation](#-documentation)
-- [Uninstallation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml?tab=readme-ov-file#%EF%B8%8F-uninstallation)
-- [Contributing](#-contributing)
-- [License](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/LICENSE)
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [System Requirements](#system-requirements)
+- [Installation](#installation)
+- [Components Overview](#components-overview)
+- [Usage and Control](#usage-and-control)
+- [Monitoring and Alerts](#monitoring-and-alerts)
+- [Documentation](#documentation)
+- [Uninstallation](#uninstallation)
+- [Contributing](#contributing)
+- [License](#license)
 
-## 🎨 Overview
+## Overview
 
-**LXC AutoScale ML** is a tool designed to manage LXC containers on Proxmox hosts using machine learning for automatic scaling. It dynamically adjusts container resources to maintain optimal performance and efficient resource utilization.
+LXC AutoScale ML manages LXC containers on Proxmox hosts using machine learning for automatic scaling. It dynamically adjusts container resources to maintain optimal performance and efficient resource utilization.
 
-### 🚀 Key Features
+### Key Features
 
 - **Proxmox Integration**: Seamless integration with Proxmox hosts via API and CLI.
 - **ML-Driven Autoscaling**: Utilizes IsolationForest machine learning model to detect anomalies and predict resource demands.
@@ -59,7 +53,7 @@
 - **Smart Resource Management**: Incremental scaling (no more jumping to max/min), stale lock cleanup, metrics file size limiting.
 - **Production-Ready**: Comprehensive error handling, detailed logging, and troubleshooting guides.
 
-## 📋 System Requirements
+## System Requirements
 
 - **Proxmox Host**: Version 6.x or higher (tested on 8.2.4)
 - **Operating System**: Linux (Debian-based preferred)
@@ -73,7 +67,7 @@
 
 > **Note**: All dependencies are automatically installed by the installation script and listed in `requirements.txt`.
 
-## 🛠️ Installation
+## Installation
 
 To install **LXC AutoScale ML**, execute the following command:
 
@@ -81,7 +75,7 @@ To install **LXC AutoScale ML**, execute the following command:
 curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-ml/main/install.sh | bash
 ```
 
-### ⚠️ Prerequisites
+### Prerequisites
 
 - **Root or Sudo Privileges**: Ensure the command is executed with appropriate privileges.
 - **Internet Access**: Required on the Proxmox server for downloading files and packages.
@@ -122,13 +116,13 @@ curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-
 > _Tnx to No-Pen9082 to point me out to that. [Here](https://forum.proxmox.com/threads/lxc-containers-shows-hosts-load-average.45724/page-2) the Proxmox forum thread on the topic._
 
 
-## 📦 Components Overview
+## Components Overview
 
 ### 1. API Component
 
 The **API** provides RESTful endpoints for managing autoscaling services with enterprise-grade security and performance.
 
-#### 📘 Features
+#### Features
 
 - **Scaling Operations**: Trigger container scaling manually or via automation.
 - **Configuration Management**: Dynamically update scaling configurations.
@@ -142,7 +136,7 @@ The **API** provides RESTful endpoints for managing autoscaling services with en
 - **Audit Logging**: Complete logs of all API interactions for security and debugging.
 - **High Performance**: Handles 60+ containers with ease via optimized async operations.
 
-#### 📋 API Endpoints
+#### API Endpoints
 
 | Endpoint                   | Methods | Description                                             | Example                                                                                   |
 |----------------------------|---------|---------------------------------------------------------|-------------------------------------------------------------------------------------------|
@@ -167,7 +161,7 @@ The **API** provides RESTful endpoints for managing autoscaling services with en
 
 The **Monitor** service continuously tracks the performance and resource usage of LXC containers.
 
-#### 📘 Features
+#### Features
 
 - **Real-Time Metrics Collection**: Collects CPU, memory, disk, and network usage statistics.
 - **Anomaly Detection**: Detects unusual patterns in resource usage.
@@ -180,7 +174,7 @@ The **Monitor** service continuously tracks the performance and resource usage o
 
 The **Model** uses machine learning algorithms to analyze metrics and make intelligent scaling decisions.
 
-#### 📘 Features
+#### Features
 
 - **IsolationForest ML Model**: Detects anomalies in resource usage patterns with high accuracy.
 - **Incremental Scaling**: Scales resources gradually (±1 core, ±512MB RAM) instead of jumping to extremes.
@@ -195,7 +189,7 @@ The **Model** uses machine learning algorithms to analyze metrics and make intel
 - **Configurable Models**: Supports various ML algorithms and custom thresholds.
 - **Production-Ready**: Comprehensive error handling and detailed logging.
 
-## 🔧 Usage and Control
+## Usage and Control
 
 Manage the autoscaling services with the following commands:
 
@@ -213,7 +207,7 @@ Manage the autoscaling services with the following commands:
   systemctl restart lxc_autoscale_ml.service
   ```
 
-### 📊 Monitoring and Alerts
+### Monitoring and Alerts
 
 - **Prometheus Metrics**: Native Prometheus metrics export at `/metrics` endpoint
   - Scaling actions counter
@@ -238,23 +232,36 @@ lxc_scaling_actions_total{action="scale_up"} / lxc_scaling_actions_total{action=
 rate(lxc_api_request_duration_seconds_sum[5m]) / rate(lxc_api_request_duration_seconds_count[5m])
 ```
 
-## 📚 Documentation
+## Documentation
 
-For detailed documentation, including advanced usage, configuration options, and troubleshooting, please refer to:
+For comprehensive documentation, visit the **[Documentation Site](./docs/)** or build it locally:
 
-- **[Extended Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/README.md)** - Complete guide
-- **[API Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_autoscale_api/README.md)** - API endpoints and usage
-- **[Model Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_model/README.md)** - ML model details
-- **[Monitor Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_monitor/README.md)** - Metrics collection
-- **[Troubleshooting Guide](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/TROUBLESHOOTING.md)** - Common issues and solutions
+```bash
+cd docs
+npm install
+npm run dev
+```
 
-### Recent Improvements
+### Quick Links
 
-- **[BUGFIX_SCALING_ISSUE_6.md](BUGFIX_SCALING_ISSUE_6.md)** - Fixed critical scaling logic bugs
-- **[QUICKWINS_80_20.md](QUICKWINS_80_20.md)** - High-impact performance optimizations  
-- **[FIXES_ISSUES_3_4.md](FIXES_ISSUES_3_4.md)** - Rate limiting fix + batch async API (10x faster)
+| Section | Description |
+|---------|-------------|
+| [Getting Started](./docs/guide/getting-started.md) | Installation and initial setup |
+| [Architecture](./docs/guide/architecture.md) | System design and data flow |
+| [Configuration](./docs/reference/configuration.md) | All configuration options |
+| [API Reference](./docs/reference/api-endpoints.md) | Complete API documentation |
+| [Troubleshooting](./docs/guide/troubleshooting.md) | Common issues and solutions |
+| [Changelog](./docs/changelog.md) | Version history |
 
-## 🛠️ Uninstallation
+### Component Documentation
+
+| Component | Description |
+|-----------|-------------|
+| [API](./docs/components/api.md) | RESTful interface for scaling operations |
+| [Model](./docs/components/model.md) | ML engine and scaling logic |
+| [Monitor](./docs/components/monitor.md) | Metrics collection service |
+
+## Uninstallation
 
 To uninstall **LXC AutoScale ML**, execute the following command:
 
@@ -266,7 +273,7 @@ curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-
 > The uninstallation script will remove all related files and configurations.
 > Ensure to back up any important data before proceeding.
 
-## 📝 Contributing
+## Contributing
 
 We welcome contributions! Please follow these steps:
 
@@ -303,6 +310,6 @@ If You like my projects, you may also like these ones:
 > [!CAUTION]
 > I am not responsible for any potential damage or issues that may arise from using this tool. 
 
-## 🛡️ License
+## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
