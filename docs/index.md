@@ -81,4 +81,4 @@ systemctl status lxc_autoscale_api lxc_monitor lxc_autoscale_ml
 
 LXC AutoScale ML is released under the [MIT License](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/LICENSE).
 
-Enjoy and contribute :)
+Enjoy and contribute :) 
