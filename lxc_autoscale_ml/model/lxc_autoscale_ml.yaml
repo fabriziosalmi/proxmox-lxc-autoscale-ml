@@ -84,5 +84,7 @@ prediction:
 
 # Ignored Containers
 ignore_lxc:
-  - "101"  # List of container IDs to ignore from scaling
-  - "102"
+  # List container IDs to exclude from autoscaling
+  # Example: ["100", "999"] 
+  # Note: 101 and 102 are common first container IDs - don't ignore them by default!
+  []  # Empty list = scale all containers

@@ -15,8 +15,15 @@ lxc:
   max_retries: 3
 
 rate_limiting:
-  # Maximum number of requests allowed per minute to prevent abuse.
-  max_requests_per_minute: 60
+  # Enable or disable rate limiting globally
+  enabled: true
+  
+  # Maximum number of requests allowed per client IP
+  # Note: localhost (127.0.0.1) is always exempt for internal ML service
+  max_requests_per_minute: 120  # Increased from 60 to handle multiple containers
+  
+  # Time window for rate limiting in seconds (default 60)
+  time_window_seconds: 60
 
 # Authentication Configuration
 authentication:

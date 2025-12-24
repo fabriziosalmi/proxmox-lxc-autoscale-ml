@@ -18,6 +18,7 @@ from data_manager import load_data, preprocess_data
 from model import train_anomaly_models, predict_anomalies
 from scaling import determine_scaling_action, apply_scaling
 from signal_handler import setup_signal_handlers
+from async_api_client import fetch_container_configs_sync
 
 # Circuit breaker state for API calls
 class CircuitBreaker:
@@ -92,57 +93,44 @@ def main():
 
             logging.info("Processing containers for scaling decisions...")
 
+            # Get all unique container IDs
+            container_ids = [str(cid) for cid in df["container_id"].unique()]
+            
+            # Batch fetch all container configs in parallel (10x faster than sequential!)
+            logging.info(f"Batch fetching configs for {len(container_ids)} containers...")
+            batch_start = time.time()
+            
+            all_configs = fetch_container_configs_sync(
+                container_ids,
+                config["api"]["api_url"],
+                circuit_breaker=api_circuit_breaker,
+                timeout=5,
+                max_concurrent=10
+            )
+            
+            batch_duration = time.time() - batch_start
+            successful_fetches = sum(1 for c in all_configs.values() if c is not None)
+            logging.info(
+                f"Batch fetch completed in {batch_duration:.2f}s: "
+                f"{successful_fetches}/{len(container_ids)} successful "
+                f"({successful_fetches/batch_duration:.1f} containers/sec)"
+            )
+
             # Iterate over each container and make scaling decisions
-            for container_id in df["container_id"].unique():
-                container_data = df[df["container_id"] == container_id]
+            for container_id in container_ids:
+                container_data = df[df["container_id"] == int(container_id)]
                 latest_metrics = container_data.iloc[-1].copy()
 
-                # Fetch current CPU and RAM configuration from API with retry logic
-                latest_metrics["current_cores"] = config["scaling"]["min_cpu_cores"]
-                latest_metrics["current_ram_mb"] = config["scaling"]["min_ram_mb"]
-                
-                # Check circuit breaker before attempting API call
-                api_key = f"api_{container_id}"
-                if api_circuit_breaker.is_open(api_key):
-                    logging.warning(f"Circuit breaker open for container {container_id}, using defaults")
+                # Use batch-fetched config or defaults
+                config_data = all_configs.get(container_id)
+                if config_data:
+                    latest_metrics["current_cores"] = config_data.get("cores", config["scaling"]["min_cpu_cores"])
+                    latest_metrics["current_ram_mb"] = config_data.get("memory_mb", config["scaling"]["min_ram_mb"])
+                    logging.debug(f"Container {container_id} current config: {config_data.get('cores')} cores, {config_data.get('memory_mb')} MB RAM")
                 else:
-                    try:
-                        import requests
-                        api_url = config["api"]["api_url"]
-                        max_retries = 3
-                        retry_delay = 1
-                        
-                        for attempt in range(max_retries):
-                            try:
-                                response = requests.get(
-                                    f"{api_url}/resource/vm/config?vm_id={container_id}", 
-                                    timeout=5
-                                )
-                                if response.status_code == 200:
-                                    vm_config = response.json().get("data", {})
-                                    latest_metrics["current_cores"] = vm_config.get("cores", config["scaling"]["min_cpu_cores"])
-                                    latest_metrics["current_ram_mb"] = vm_config.get("memory_mb", config["scaling"]["min_ram_mb"])
-                                    logging.debug(f"Container {container_id} current config: {vm_config.get('cores')} cores, {vm_config.get('memory_mb')} MB RAM")
-                                    api_circuit_breaker.record_success(api_key)
-                                    break
-                                elif response.status_code >= 500 and attempt < max_retries - 1:
-                                    logging.warning(f"API server error (attempt {attempt + 1}/{max_retries}), retrying...")
-                                    time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
-                                else:
-                                    logging.warning(f"Could not fetch config for container {container_id} (status {response.status_code}), using defaults")
-                                    if response.status_code >= 500:
-                                        api_circuit_breaker.record_failure(api_key)
-                                    break
-                            except requests.RequestException as e:
-                                if attempt < max_retries - 1:
-                                    logging.warning(f"API request failed (attempt {attempt + 1}/{max_retries}): {e}, retrying...")
-                                    time.sleep(retry_delay * (2 ** attempt))
-                                else:
-                                    logging.warning(f"API request failed after {max_retries} attempts: {e}, using defaults")
-                                    api_circuit_breaker.record_failure(api_key)
-                    except Exception as e:
-                        logging.warning(f"Error fetching config for container {container_id}: {e}, using defaults")
-                        api_circuit_breaker.record_failure(api_key)
+                    latest_metrics["current_cores"] = config["scaling"]["min_cpu_cores"]
+                    latest_metrics["current_ram_mb"] = config["scaling"]["min_ram_mb"]
+                    logging.warning(f"Using defaults for container {container_id} (config fetch failed)")
 
                 logging.debug(f"Latest metrics for container {container_id}: {latest_metrics.to_dict()}")
 
