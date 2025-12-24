@@ -172,4 +172,3 @@ INFO - Batch fetch completed in 0.58s: 60/60 successful (103.4 containers/sec)
 ## Next Steps
 
 - [Configuration](/reference/configuration): Review all new configuration options
-- [Changelog](/changelog): See complete list of changes
