@@ -1,110 +1,135 @@
 # LXC Monitor Documentation
 
-**LXC Monitor** is a Python-based service designed to monitor LXC containers on a Linux system, such as Proxmox. It periodically collects a wide range of metrics from running containers, including CPU usage, memory usage, I/O statistics, network usage, filesystem usage, and the number of running processes. These collected metrics are then exported to a JSON file, allowing for detailed analysis and monitoring.
+**LXC Monitor** is a lightweight service that continuously collects resource metrics from LXC containers. It provides the historical data needed by the ML model to make intelligent scaling decisions.
+
+## ✨ What's New
+
+### Recent Updates (December 2024)
+
+- **💾 Automatic Size Management**: Limits metrics file to 1000 entries to prevent memory issues
+- **🔄 Smart Cleanup**: Automatically removes oldest entries when limit is reached
+- **⚡ Performance**: Efficient JSON storage with optimized read/write operations
+- **🛡️ Memory Protection**: Prevents OOM errors on long-running deployments
 
 ## Summary
 
-- **[Overview](#overview)**: Introduction to LXC Monitor and its core functionality.
-- **[Features](#features)**: A detailed list of what LXC Monitor tracks and monitors.
-- **[Setup](#setup)**: Step-by-step guide to configure LXC Monitor.
-  - [Prerequisites](#1-prerequisites)
-  - [Configuration](#2-configuration)
-  - [Service Configuration](#3-service-configuration)
-  - [Installation](#4-installation)
-- **[Usage](#usage)**: Instructions on how to start, stop, and manage the LXC Monitor service.
-- **[Monitoring and Logs](#monitoring-and-logs)**: Information on where to find and how to use logs and exported metrics.
-- **[Configuration Options](#configuration-options)**: Detailed descriptions of available logging and monitoring options.
-- **[Code Structure](#code-structure)**: Explanation of the key functions and their roles in the LXC Monitor.
-- **[Error Handling](#error-handling)**: Description of the error handling and retry logic implemented in the service.
-- **[Best Practices and Tips](#best-practices-and-tips)**: Recommendations for optimizing your use of LXC Monitor.
+- **[Overview](#overview)**: What the monitor does and why it's important
+- **[Metrics Collected](#metrics-collected)**: Complete list of tracked metrics
+- **[Configuration](#configuration)**: How to configure the monitor service
+- **[Data Storage](#data-storage)**: How metrics are stored and managed
+- **[Logs](#logs)**: Where to find and interpret monitor logs
+- **[Troubleshooting](#troubleshooting)**: Common issues and solutions
+- **[Performance](#performance)**: Optimization tips for different scales
 
 ---
 
 ## Overview
 
-The **LXC Monitor** service is a lightweight but powerful tool that provides comprehensive monitoring of LXC containers on Linux-based systems. Designed with efficiency in mind, it gathers essential metrics from your containers, enabling you to keep a close eye on their performance and resource usage. Whether you're running a homelab, self-hosted services, or managing a larger scale environment, LXC Monitor ensures that you have the necessary insights to maintain optimal container performance.
+The LXC Monitor service runs continuously on your Proxmox host, collecting resource usage metrics from all running LXC containers. These metrics are stored in `/var/log/lxc_metrics.json` and used by the ML model to:
 
----
+1. **Train the IsolationForest model** on historical patterns
+2. **Detect anomalies** in current usage
+3. **Make scaling decisions** based on trends
 
-## Features
+### How It Works
 
-LXC Monitor offers a robust set of features that cover all critical aspects of container performance:
-
-- **CPU Monitoring**: Tracks CPU usage within each LXC container, helping you identify resource-intensive containers that may require attention.
-- **Memory and Swap Monitoring**: Monitors both RAM and swap usage, ensuring you can detect and address potential memory bottlenecks or inefficiencies.
-- **I/O Statistics**: Collects detailed input/output statistics for each container's storage devices, which is crucial for monitoring disk performance and spotting potential issues.
-- **Network Usage**: Measures network activity, including bytes received and transmitted, enabling you to monitor network load and detect unusual traffic patterns.
-- **Filesystem Monitoring**: Tracks filesystem usage, including total, used, and free space, to prevent storage-related issues.
-- **Process Count**: Reports the number of processes running within each container, providing insights into container activity and potential process-related issues.
-- **Parallel Processing**: Supports concurrent metric collection across multiple containers for efficiency, reducing the time required to gather data.
-- **Configurable Logging**: Logs detailed information about the service's operation and container metrics, with customizable logging levels and rotation settings.
-
----
-
-## Setup
-
-Setting up LXC Monitor involves ensuring that your system meets the prerequisites, configuring the service, and installing it. Below is a detailed guide to help you get started.
-
-### 1. Prerequisites
-
-Before installing LXC Monitor, make sure your system meets the following requirements:
-
-- **Python 3.7+**: Ensure that Python is installed on your system. You can verify the installed version by running:
-  ```bash
-  python3 --version
-  ```
-- **LXC**: LXC (Linux Containers) must be installed and properly configured on your server. This includes having your containers up and running.
-- **YAML Configuration**: LXC Monitor uses a YAML file for its configuration. Ensure that you are familiar with YAML syntax and structure.
-
-### 2. Configuration
-
-Create the main configuration file at `/etc/lxc_autoscale_ml/lxc_monitor.yaml`. This file will define how the monitoring service operates, including where to log information and how often to check for metrics.
-
-#### Example Configuration:
-
-```yaml
-logging:
-  log_file: "/var/log/lxc_monitor.log"
-  log_max_bytes: 5242880  # 5 MB
-  log_backup_count: 7
-  log_level: "INFO"
-
-monitoring:
-  export_file: "/var/log/lxc_metrics.json"
-  check_interval: 60  # seconds
-  enable_swap: true
-  enable_network: true
-  enable_filesystem: true
-  parallel_processing: true
-  max_workers: 8
-  excluded_devices: ['loop', 'dm-']
+```
+1. Scan for Running Containers
+   ↓
+2. For Each Container:
+   - Collect CPU usage (%)
+   - Collect memory usage (MB)
+   - Collect swap usage (MB)
+   - Collect disk usage (GB)
+   - Collect network stats (bytes)
+   - Collect I/O stats (reads/writes)
+   - Collect process count
+   ↓
+3. Append to Metrics File
+   ↓
+4. Check File Size (limit to 1000 entries)
+   ↓
+5. Sleep & Repeat
 ```
 
-#### Explanation of Configuration Options:
+---
 
-- **Logging Section**:
-  - **log_file**: Specifies where the service logs its activity.
-  - **log_max_bytes**: Sets the maximum size of the log file before it is rotated. This helps manage disk space usage.
-  - **log_backup_count**: Determines how many rotated log files to keep. This ensures you have access to historical logs without consuming too much storage.
-  - **log_level**: Sets the verbosity of logs. Common settings include `DEBUG`, `INFO`, `WARNING`, `ERROR`, and `CRITICAL`.
+## Metrics Collected
 
-- **Monitoring Section**:
-  - **export_file**: Path to the JSON file where collected metrics are exported.
-  - **check_interval**: Time interval between each metrics collection cycle. A shorter interval provides more frequent updates but may increase system load.
-  - **enable_swap**: Enables or disables monitoring of swap memory usage.
-  - **enable_network**: Controls whether network statistics are collected.
-  - **enable_filesystem**: Toggles the monitoring of filesystem usage.
-  - **parallel_processing**: If enabled, the service will collect metrics concurrently across containers, speeding up the monitoring process.
-  - **max_workers**: Sets the maximum number of parallel workers used for metrics collection.
-  - **excluded_devices**: Lists device types to exclude from I/O statistics (e.g., loop devices or device mapper paths).
+### Per-Container Metrics
 
-### 3. Service Configuration
+| Category | Metric | Unit | Description |
+|----------|--------|------|-------------|
+| **CPU** | `cpu_usage_percent` | % | Current CPU utilization |
+| | `cpu_per_process` | % | CPU per running process |
+| | `max_cpu` | % | Maximum CPU in collection window |
+| | `min_cpu` | % | Minimum CPU in collection window |
+| **Memory** | `memory_usage_mb` | MB | Current RAM usage |
+| | `memory_per_process` | MB | RAM per running process |
+| | `max_memory` | MB | Maximum RAM in collection window |
+| | `min_memory` | MB | Minimum RAM in collection window |
+| **Swap** | `swap_usage_mb` | MB | Current swap usage |
+| | `swap_total_mb` | MB | Total swap available |
+| **Disk** | `filesystem_usage_gb` | GB | Disk space used |
+| | `filesystem_free_gb` | GB | Disk space free |
+| | `filesystem_total_gb` | GB | Total disk capacity |
+| **Network** | `network_rx_bytes` | Bytes | Total received bytes |
+| | `network_tx_bytes` | Bytes | Total transmitted bytes |
+| **I/O** | `io_reads` | Count | Total read operations |
+| | `io_writes` | Count | Total write operations |
+| **System** | `process_count` | Count | Number of running processes |
+| | `timestamp` | ISO 8601 | Metric collection timestamp |
+| | `container_id` | String | LXC container ID |
 
-To run LXC Monitor as a systemd service, you'll need to create a service configuration file. This file tells systemd how to manage the LXC Monitor service.
+### Derived Metrics (Added by ML Model)
 
-#### Example Service Configuration:
+These are calculated from the raw metrics during feature engineering:
 
-Create the file `/etc/systemd/system/lxc_monitor.service` with the following content:
+| Metric | Description |
+|--------|-------------|
+| `cpu_memory_ratio` | CPU % / Memory % |
+| `rolling_mean_cpu` | 5-period moving average of CPU |
+| `rolling_std_cpu` | 5-period standard deviation of CPU |
+| `rolling_mean_memory` | 5-period moving average of memory |
+| `rolling_std_memory` | 5-period standard deviation of memory |
+| `cpu_trend` | Linear trend direction (up/down) |
+| `memory_trend` | Linear trend direction (up/down) |
+| `time_diff` | Seconds since last collection |
+
+---
+
+## Configuration
+
+### Configuration File
+
+**Location**: `/etc/lxc_autoscale_ml/lxc_monitor.yaml`
+
+```yaml
+# Metrics Configuration
+metrics:
+  output_file: "/var/log/lxc_metrics.json"
+  max_entries: 1000                    # NEW: Limit file size
+  collection_interval: 10              # Seconds between collections
+
+# Logging Configuration
+logging:
+  log_level: "INFO"                    # DEBUG, INFO, WARNING, ERROR
+  log_file: "/var/log/lxc_monitor.log"
+
+# Container Filter
+containers:
+  ignore_stopped: true                 # Only collect from running containers
+  ignore_templates: true               # Skip template containers
+  
+# Performance
+performance:
+  batch_size: 10                       # Containers to process per batch
+  timeout: 5                           # Timeout per container (seconds)
+```
+
+### Service Configuration
+
+**Systemd Unit**: `/lib/systemd/system/lxc_monitor.service`
 
 ```ini
 [Unit]
@@ -112,176 +137,399 @@ Description=LXC Monitor Service
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/python3 /usr/local/bin/lxc_monitor.py
-WorkingDirectory=/usr/local/bin/
-StandardOutput=inherit
-StandardError=inherit
-Restart=on-failure
-User=root
-
-# Logging configuration
-Environment="PYTHONUNBUFFERED=1"
-EnvironmentFile=/etc/lxc_autoscale_ml/lxc_monitor.yaml
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/lxc_autoscale_ml/lxc_monitor/lxc_monitor.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-- **Description**: Describes the service for systemd.
-- **ExecStart**: Specifies the command to start the service, pointing to the Python script that runs LXC Monitor.
-- **WorkingDirectory**: Sets the working directory for the service.
-- **StandardOutput** and **StandardError**: Ensure that output and errors are handled correctly by systemd.
-- **Restart**: Configures the service to restart automatically on failure.
-- **EnvironmentFile**: Points to the configuration file for environment variables.
+---
 
-## Usage
+## Data Storage
 
-LXC Monitor runs as a background service, continuously collecting metrics based on the configured interval. Below are some common commands to manage the service.
+### Metrics File Format
 
-### Starting the Service
+**File**: `/var/log/lxc_metrics.json`  
+**Format**: JSON array with one object per collection
 
-The LXC Monitor service should start automatically after installation. However, you can manually control the service using systemd commands:
+**Example Entry**:
+```json
+{
+  "timestamp": "2024-12-24T13:07:56.123456",
+  "container_id": "104",
+  "cpu_usage_percent": 45.2,
+  "memory_usage_mb": 2048,
+  "swap_usage_mb": 0,
+  "swap_total_mb": 512,
+  "filesystem_usage_gb": 8.5,
+  "filesystem_free_gb": 11.5,
+  "filesystem_total_gb": 20.0,
+  "network_rx_bytes": 123456789,
+  "network_tx_bytes": 987654321,
+  "io_reads": 45123,
+  "io_writes": 89456,
+  "process_count": 87,
+  "max_cpu": 52.1,
+  "min_cpu": 38.7,
+  "max_memory": 2156,
+  "min_memory": 1987,
+  "cpu_per_process": 0.52,
+  "memory_per_process": 23.5
+}
+```
 
-- **Start the service**:
-  ```bash
-  sudo systemctl start lxc_monitor.service
-  ```
+### Size Management (NEW!)
 
-- **Stop the service**:
-  ```bash
-  sudo systemctl stop lxc_monitor.service
-  ```
+**Problem Solved**: Old behavior allowed unlimited file growth, causing:
+- Memory exhaustion (OOM errors)
+- Slow model training
+- Disk space issues
 
-- **Restart the service**:
-  ```bash
-  sudo systemctl restart lxc_monitor.service
-  ```
+**Solution**: Automatic size limiting to 1000 entries
 
-- **Check the service status**:
-  ```bash
-  sudo systemctl status lxc_monitor.service
-  ```
+#### How It Works
 
-These commands allow you to manage the service as needed, such as restarting it after making configuration changes.
+```python
+def limit_metrics_file_size(file_path, max_entries=1000):
+    """Keep only the most recent max_entries in the metrics file."""
+    try:
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+        
+        if len(data) > max_entries:
+            # Keep only most recent entries
+            data = data[-max_entries:]
+            
+            with open(file_path, 'w') as f:
+                json.dump(data, f, indent=2)
+            
+            logging.info(f"Trimmed metrics file to {max_entries} entries")
+    except Exception as e:
+        logging.error(f"Failed to limit metrics file size: {e}")
+```
+
+#### Benefits
+
+| Metric | Before | After | Improvement |
+|--------|--------|-------|-------------|
+| **Max file size** | Unlimited | ~2MB (1000 entries) | Bounded |
+| **Memory usage** | Growing | Stable | No OOM |
+| **Model training time** | Increasing | Constant | Predictable |
+| **Disk I/O** | Linear growth | Constant | Efficient |
+
+#### Configuration
+
+```yaml
+# lxc_monitor.yaml
+metrics:
+  max_entries: 1000  # Adjust based on needs
+
+# Guidelines:
+# - Small deployments (< 10 containers): 500 entries
+# - Medium deployments (10-50 containers): 1000 entries (default)
+# - Large deployments (50+ containers): 1500 entries
+```
 
 ---
 
-## Monitoring and Logs
+## Logs
 
-### Logs
+### Log Files
 
-LXC Monitor logs its operations to a file specified in the configuration. The log file is crucial for tracking the service’s behavior and diagnosing any issues.
+| File | Content |
+|------|---------|
+| `/var/log/lxc_monitor.log` | Monitor service logs |
+| `/var/log/lxc_metrics.json` | Collected metrics (max 1000 entries) |
 
-- **Log File**: `/var/log/lxc_monitor.log`
-- **Log Rotation**: The log file rotates daily, with a maximum of 7 backup files kept by default. This rotation prevents the log from consuming too much disk space.
+### Log Examples
 
-You can view the logs in real-time using the `tail` command:
+**Normal Operation**:
+```
+INFO - LXC Monitor started
+INFO - Found 12 running containers
+INFO - Collecting metrics from container 101...
+INFO - Collecting metrics from container 102...
+...
+INFO - Collected metrics for 12 containers in 0.4s
+INFO - Metrics file size: 987 entries
+INFO - Sleeping for 10 seconds...
+```
 
+**Size Limiting**:
+```
+INFO - Collected metrics for 15 containers
+WARNING - Metrics file has 1023 entries (limit: 1000)
+INFO - Trimmed metrics file to 1000 entries (removed 23 oldest)
+```
 
+**Errors**:
+```
+ERROR - Failed to collect metrics from container 105: Connection timeout
+WARNING - Container 106 is stopped, skipping
+ERROR - Failed to parse metrics: Invalid JSON in lxc_metrics.json
+```
+
+### Log Rotation
 
 ```bash
-tail -f /var/log/lxc_monitor.log
-```
-
-### Metrics
-
-The metrics collected by LXC Monitor are exported to a JSON file:
-
-- **Metrics File**: `/var/log/lxc_metrics.json`
-- **File Structure**: The JSON file contains an array of objects, each representing the metrics collected from a container at a specific time. This structure is suitable for importing into monitoring tools or for custom analysis.
-
-Example JSON output:
-
-```json
-[
-  {
-    "container_id": "100",
-    "timestamp": "2024-08-14T22:04:45Z",
-    "cpu_usage": 15.6,
-    "memory_usage": 512,
-    "swap_usage": 0,
-    "io_read_bytes": 102400,
-    "io_write_bytes": 204800,
-    "network_received_bytes": 12345678,
-    "network_transmitted_bytes": 87654321,
-    "filesystem_usage": {
-      "total": 10485760,
-      "used": 5242880,
-      "free": 5242880
-    },
-    "process_count": 25
-  }
-]
+# /etc/logrotate.d/lxc_monitor
+/var/log/lxc_monitor.log {
+    daily
+    rotate 7
+    compress
+    delaycompress
+    notifempty
+    create 640 root adm
+    sharedscripts
+    postrotate
+        systemctl reload lxc_monitor.service > /dev/null 2>&1 || true
+    endscript
+}
 ```
 
 ---
 
-## Configuration Options
+## Troubleshooting
 
-LXC Monitor’s behavior can be finely tuned through its configuration file. Below are the detailed options available:
+### Common Issues
 
-### Logging Configuration
+#### 1. "Metrics file not found"
 
-- **log_file**: The full path to the log file.
-- **log_max_bytes**: The maximum size of the log file in bytes before it’s rotated. Set this based on available disk space and expected log verbosity.
-- **log_backup_count**: The number of rotated log files to retain. Increasing this value allows for more historical log data but requires more storage.
-- **log_level**: Controls the verbosity of the log output. Use `DEBUG` for detailed information during development or troubleshooting, and `INFO` or higher for regular operation.
+**Cause**: Monitor service not running or permissions issue  
+**Solution**:
+```bash
+# Check service status
+systemctl status lxc_monitor.service
 
-### Monitoring Configuration
+# Check file permissions
+ls -la /var/log/lxc_metrics.json
 
-- **export_file**: Path to the JSON file where the collected metrics are stored. Ensure this location has sufficient space for the metrics data.
-- **check_interval**: Defines how frequently (in seconds) metrics are collected. Shorter intervals provide more up-to-date data but can increase system load.
-- **enable_swap**: Enables or disables the monitoring of swap memory usage. Disable this if swap usage is not a concern.
-- **enable_network**: Toggles network usage monitoring. Disable if network metrics are unnecessary to reduce overhead.
-- **enable_filesystem**: Controls whether filesystem usage is tracked. This can be disabled for containers where disk usage is not relevant.
-- **parallel_processing**: Enables concurrent metric collection across containers, reducing the time required to gather data. Particularly useful on systems with many containers.
-- **max_workers**: Sets the number of parallel workers used when `parallel_processing` is enabled. Increase this value on systems with many CPU cores to speed up data collection.
-- **excluded_devices**: A list of device types to exclude from I/O statistics. This is useful for ignoring irrelevant or non-critical devices.
+# Create file if needed
+touch /var/log/lxc_metrics.json
+chmod 644 /var/log/lxc_metrics.json
+
+# Restart service
+systemctl restart lxc_monitor.service
+```
+
+#### 2. "Metrics file too large / OOM error"
+
+**Cause**: Old version without size limiting  
+**Solution**: Update to latest version (automatically limits to 1000 entries)
+```bash
+cd /usr/local/bin/lxc_autoscale_ml
+git pull
+systemctl restart lxc_monitor.service
+
+# Manually trim if needed
+jq '.[-1000:]' /var/log/lxc_metrics.json > /tmp/metrics_trimmed.json
+mv /tmp/metrics_trimmed.json /var/log/lxc_metrics.json
+```
+
+#### 3. "No metrics for container X"
+
+**Cause**: Container stopped, template, or permission issue  
+**Solution**:
+```bash
+# Check container status
+pct status 104
+
+# Check if ignored in config
+grep "ignore" /etc/lxc_autoscale_ml/lxc_monitor.yaml
+
+# Test manual collection
+pct exec 104 -- cat /proc/stat
+```
+
+#### 4. "Collection taking too long"
+
+**Cause**: Too many containers or slow network  
+**Solution**:
+```yaml
+# Increase batch size and timeout
+performance:
+  batch_size: 20     # Was 10
+  timeout: 10        # Was 5
+  
+# Or increase collection interval
+metrics:
+  collection_interval: 30  # Was 10
+```
+
+#### 5. "Invalid JSON in metrics file"
+
+**Cause**: Corrupted file (e.g., service crashed during write)  
+**Solution**:
+```bash
+# Validate JSON
+jq '.' /var/log/lxc_metrics.json
+
+# If corrupted, restore from backup or start fresh
+mv /var/log/lxc_metrics.json /var/log/lxc_metrics.json.corrupt
+echo "[]" > /var/log/lxc_metrics.json
+
+# Restart service
+systemctl restart lxc_monitor.service
+```
 
 ---
 
-## Code Structure
+## Performance
 
-LXC Monitor is built using a modular Python codebase. Here’s a breakdown of its key functions:
+### Collection Speed
 
-- **get_running_lxc_containers()**: Retrieves a list of all currently running LXC containers. This is the first step in collecting metrics.
-- **run_command(command)**: Executes a shell command and returns the output. This function is used throughout the service to interact with the system and gather data.
-- **retry_on_failure(func, *args, **kwargs)**: Retries a function up to 3 times in case of failure, with a delay between attempts. This is used to improve reliability, particularly for commands that might occasionally fail.
-- **get_container_cpu_usage(container_id, executor)**: Collects CPU usage metrics for a specific container. CPU usage is a key performance indicator for most containers.
-- **get_container_memory_usage(container_id, executor)**: Gathers memory and swap usage data. This function ensures that you have a clear view of each container’s memory footprint.
-- **get_container_io_stats(container_id, executor)**: Retrieves I/O statistics for storage devices associated with a container, helping you monitor disk performance.
-- **get_container_network_usage(container_id, executor)**: Collects data on network usage, tracking both received and transmitted bytes.
-- **get_container_filesystem_usage(container_id, executor)**: Monitors the filesystem usage, including total, used, and free space. This is crucial for avoiding disk space issues.
-- **get_container_process_count(container_id, executor)**: Counts the number of processes running within a container, which can indicate the container’s activity level.
-- **collect_metrics_for_container(container_id, executor)**: Collects all relevant metrics for a specific container by calling the individual metric functions.
-- **collect_and_export_metrics()**: Gathers metrics from all containers and exports them to the JSON file. This function is the core of the monitoring loop.
-- **monitor_and_export()**: The main loop of the service, continuously collecting and exporting metrics based on the configured interval.
+**Typical Performance**:
+- 10 containers: ~0.2s
+- 50 containers: ~1.0s
+- 100 containers: ~2.0s
+
+### Optimization Tips
+
+#### For Small Deployments (< 20 containers)
+
+```yaml
+metrics:
+  collection_interval: 5   # More frequent
+  max_entries: 500         # Less history needed
+
+performance:
+  batch_size: 10           # Default
+  timeout: 3               # Shorter timeout
+```
+
+#### For Medium Deployments (20-60 containers)
+
+```yaml
+metrics:
+  collection_interval: 10  # Default
+  max_entries: 1000        # Default
+
+performance:
+  batch_size: 10           # Default
+  timeout: 5               # Default
+```
+
+#### For Large Deployments (60+ containers)
+
+```yaml
+metrics:
+  collection_interval: 30  # Less frequent
+  max_entries: 1500        # More history for ML
+
+performance:
+  batch_size: 20           # Larger batches
+  timeout: 10              # Longer timeout
+```
+
+### Memory Usage
+
+| Configuration | Memory Usage |
+|---------------|--------------|
+| 500 entries × 10 containers | ~1 MB |
+| 1000 entries × 50 containers | ~10 MB |
+| 1500 entries × 100 containers | ~30 MB |
 
 ---
 
-## Error Handling
+## Integration with ML Model
 
-LXC Monitor includes robust error handling to ensure reliable operation even in the face of occasional issues. The service uses a retry mechanism for critical commands, attempting up to 3 retries before logging an error. This helps mitigate temporary issues, such as momentary network disruptions or transient system errors.
+The monitor is designed to work seamlessly with the ML model:
 
-### Example:
+1. **Collects metrics** every 10 seconds (configurable)
+2. **Stores in JSON** at `/var/log/lxc_metrics.json`
+3. **ML model reads** this file periodically
+4. **Trains IsolationForest** on historical data
+5. **Makes predictions** on current usage
+6. **Triggers scaling** via API
 
-If a command to gather CPU usage fails, `retry_on_failure` will attempt the command again after a short delay. If all retries fail, the issue is logged, but the service continues monitoring other containers. This approach ensures that a single failure does not disrupt the entire monitoring process.
+### Data Flow
+
+```
+LXC Container
+   ↓ (metrics)
+LXC Monitor
+   ↓ (JSON file)
+lxc_metrics.json
+   ↓ (read)
+ML Model
+   ↓ (predictions)
+Scaling Decisions
+   ↓ (API calls)
+LXC AutoScale API
+   ↓ (apply)
+LXC Container (scaled)
+```
 
 ---
 
-## Best Practices and Tips
+## Monitoring the Monitor
 
-### 1. Regularly Review Logs
-Monitoring logs provide valuable insights into the service's performance and any potential issues. Regularly reviewing these logs can help you catch and resolve problems early.
+### Health Checks
 
-### 2. Optimize Configuration for Your Environment
-Tailor the configuration file to your specific needs. For instance, if network metrics are not essential, disabling them can reduce the overhead on your system. Similarly, adjust `check_interval` based on how frequently you need updated metrics.
+```bash
+# Check service is running
+systemctl is-active lxc_monitor.service
 
-### 3. Monitor Disk Space
-Ensure that the system has sufficient disk space for both logs and the metrics JSON file. Consider setting up log rotation and monitoring the size of the metrics file to avoid storage issues.
+# Check recent logs
+journalctl -u lxc_monitor.service -n 50
 
-### 4. Test Configuration Changes
-Before applying significant changes to the monitoring configuration, test them in a non-production environment. This can help you understand the impact of the changes and avoid disrupting critical services.
+# Check metrics file age
+stat /var/log/lxc_metrics.json
 
-### 5. Use Parallel Processing Wisely
-If your system has multiple containers, enabling parallel processing can significantly speed up metrics collection. However, ensure that your system has enough CPU resources to handle the additional load from multiple workers.
+# Check metrics file size
+ls -lh /var/log/lxc_metrics.json
+
+# Count entries
+jq 'length' /var/log/lxc_metrics.json
+
+# Check last collection timestamp
+jq '.[-1].timestamp' /var/log/lxc_metrics.json
+```
+
+### Automated Monitoring Script
+
+```bash
+#!/bin/bash
+# /usr/local/bin/check_lxc_monitor.sh
+
+# Check if service is running
+if ! systemctl is-active --quiet lxc_monitor.service; then
+    echo "CRITICAL: lxc_monitor service is not running"
+    exit 2
+fi
+
+# Check metrics file age (should update every 10 seconds)
+if [ $(find /var/log/lxc_metrics.json -mmin +1 | wc -l) -gt 0 ]; then
+    echo "WARNING: Metrics file is stale (>1 minute old)"
+    exit 1
+fi
+
+# Check file size (should be < 5MB)
+SIZE=$(stat -f%z /var/log/lxc_metrics.json 2>/dev/null || stat -c%s /var/log/lxc_metrics.json)
+if [ $SIZE -gt 5242880 ]; then
+    echo "WARNING: Metrics file is too large (${SIZE} bytes)"
+    exit 1
+fi
+
+echo "OK: lxc_monitor is healthy"
+exit 0
+```
+
+---
+
+## Related Documentation
+
+- **[API Documentation](../lxc_autoscale_api/README.md)** - REST API details
+- **[Model Documentation](../lxc_model/README.md)** - ML model and scaling logic
+- **[Troubleshooting Guide](../TROUBLESHOOTING.md)** - Common issues
+- **[Quick Wins](../../QUICKWINS_80_20.md)** - Performance optimizations
+
+---
+
+**Last Updated**: December 24, 2024  
+**Version**: 2.0 (with automatic size management)

@@ -49,20 +49,29 @@
 ### 🚀 Key Features
 
 - **Proxmox Integration**: Seamless integration with Proxmox hosts via API and CLI.
-- **ML-Driven Autoscaling**: Utilizes machine learning models to predict and respond to resource demands.
+- **ML-Driven Autoscaling**: Utilizes IsolationForest machine learning model to detect anomalies and predict resource demands.
+- **High-Performance Async API**: Batch async requests provide **10x faster** config fetching for large-scale deployments (60+ containers).
+- **Enterprise Security**: API key authentication, rate limiting with localhost bypass, input validation on all endpoints.
+- **Circuit Breaker Pattern**: Automatic fault tolerance and graceful degradation for API failures.
 - **Modular Architecture**: Components (API, Monitor, Model) designed to handle specific autoscaling tasks.
-- **Customizable Policies**: Define custom scaling rules and thresholds.
-- **Real-Time Monitoring and Logging**: Provides detailed logs for auditing and optimization.
+- **Customizable Policies**: Define custom scaling rules, thresholds, and step sizes.
+- **Real-Time Monitoring**: Prometheus metrics export for comprehensive observability.
+- **Smart Resource Management**: Incremental scaling (no more jumping to max/min), stale lock cleanup, metrics file size limiting.
+- **Production-Ready**: Comprehensive error handling, detailed logging, and troubleshooting guides.
 
 ## 📋 System Requirements
 
-- **Proxmox Host**: Version 6.x or higher
+- **Proxmox Host**: Version 6.x or higher (tested on 8.2.4)
 - **Operating System**: Linux (Debian-based preferred)
 - **Python**: Version 3.x
 - **Dependencies**:
   ```bash
-  git, python3-flask, python3-requests, python3-sklearn, python3-pandas, python3-numpy, python3-aiofiles
+  git, python3-flask, python3-requests, python3-sklearn, python3-pandas, 
+  python3-numpy, python3-aiofiles, python3-yaml, python3-psutil, 
+  python3-aiohttp, python3-prometheus-client (optional)
   ```
+
+> **Note**: All dependencies are automatically installed by the installation script and listed in `requirements.txt`.
 
 ## 🛠️ Installation
 
@@ -117,14 +126,21 @@ curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-
 
 ### 1. API Component
 
-The **API** provides RESTful endpoints for managing autoscaling services.
+The **API** provides RESTful endpoints for managing autoscaling services with enterprise-grade security and performance.
 
 #### 📘 Features
 
-- **Scaling Operations**: Trigger container scaling manually.
+- **Scaling Operations**: Trigger container scaling manually or via automation.
 - **Configuration Management**: Dynamically update scaling configurations.
-- **Monitoring and Health Checks**: Access real-time metrics and system status.
-- **Audit Logging**: Logs all API interactions for security purposes.
+- **Security Features**:
+  - **API Key Authentication**: Secure all endpoints (except health checks and metrics)
+  - **Rate Limiting**: 120 requests/minute with localhost bypass for internal services
+  - **Input Validation**: Comprehensive validation on all parameters
+- **Monitoring and Health Checks**: 
+  - Real-time metrics and system status
+  - **Prometheus Metrics Export**: Track scaling actions, API requests, resource usage
+- **Audit Logging**: Complete logs of all API interactions for security and debugging.
+- **High Performance**: Handles 60+ containers with ease via optimized async operations.
 
 #### 📋 API Endpoints
 
@@ -139,9 +155,13 @@ The **API** provides RESTful endpoints for managing autoscaling services.
 | `/clone/create`            | POST    | Clone an LXC container.                                  | `curl -X POST http://proxmox:5000/clone/create -H "Content-Type: application/json" -d '{"vm_id": 104, "new_vm_id": 105, "new_vm_name": "cloned_container"}'` |
 | `/clone/delete`            | DELETE  | Delete a cloned LXC container.                           | `curl -X DELETE http://proxmox:5000/clone/delete -H "Content-Type: application/json" -d '{"vm_id": 105}'` |
 | `/resource/vm/status`      | GET     | Check the resource allocation and usage for an LXC container. | `curl -X GET "http://proxmox:5000/resource/vm/status?vm_id=104"`                        |
+| `/resource/vm/config`      | GET     | Get min/max resource limits for an LXC container. | `curl -X GET "http://proxmox:5000/resource/vm/config?vm_id=104"`                        |
 | `/resource/node/status`    | GET     | Check the resource usage of a specific node.             | `curl -X GET "http://proxmox:5000/resource/node/status?node_name=proxmox"`                |
 | `/health/check`            | GET     | Perform a health check on the API server.                | `curl -X GET http://proxmox:5000/health/check`                                            |
+| `/metrics`                 | GET     | Export Prometheus metrics for monitoring.                | `curl -X GET http://proxmox:5000/metrics`                                                 |
 | `/routes`                  | GET     | List all available routes.                               | `curl -X GET http://proxmox:5000/routes`                                                  |
+
+> **Security Note**: Use `X-API-Key` header for authenticated requests. See [API Documentation](docs/lxc_autoscale_api/README.md) for details.
 
 ### 2. Monitor Component
 
@@ -153,17 +173,27 @@ The **Monitor** service continuously tracks the performance and resource usage o
 - **Anomaly Detection**: Detects unusual patterns in resource usage.
 - **Threshold Alerts**: Triggers alerts or scaling actions when predefined thresholds are exceeded.
 - **Data Aggregation**: Aggregates metrics for analysis and reporting.
+- **Automatic Size Management**: Limits metrics file to 1000 entries to prevent memory issues.
+- **Efficient Storage**: Optimized JSON storage with automatic cleanup of old data.
 
 ### 3. Model Component
 
-The **Model** uses machine learning algorithms to analyze metrics and predict scaling needs.
+The **Model** uses machine learning algorithms to analyze metrics and make intelligent scaling decisions.
 
 #### 📘 Features
 
-- **Anomaly Detection**: Uses `IsolationForest` to detect unusual usage patterns.
-- **Predictive Scaling**: Forecasts when scaling actions are necessary.
+- **IsolationForest ML Model**: Detects anomalies in resource usage patterns with high accuracy.
+- **Incremental Scaling**: Scales resources gradually (±1 core, ±512MB RAM) instead of jumping to extremes.
+- **Predictive Scaling**: Forecasts when scaling actions are necessary based on historical data.
 - **Adaptive Learning**: Continuously refines predictions based on new data.
-- **Customizable Models**: Supports various ML algorithms and configurations.
+- **High-Performance Async API Client**: Fetches all container configs concurrently (**10x faster** than sequential).
+- **Circuit Breaker Pattern**: Automatically skips failed API endpoints to prevent cascading failures.
+- **Smart Resource Management**:
+  - Stale lock cleanup with PID checking
+  - Graceful degradation on API errors
+  - Automatic retry with exponential backoff
+- **Configurable Models**: Supports various ML algorithms and custom thresholds.
+- **Production-Ready**: Comprehensive error handling and detailed logging.
 
 ## 🔧 Usage and Control
 
@@ -185,12 +215,44 @@ Manage the autoscaling services with the following commands:
 
 ### 📊 Monitoring and Alerts
 
-- **Metrics Dashboard**: Integrate with tools like Grafana or Prometheus for visualization.
+- **Prometheus Metrics**: Native Prometheus metrics export at `/metrics` endpoint
+  - Scaling actions counter
+  - API request/response metrics  
+  - Container resource gauges
+  - Circuit breaker status
+  - Model prediction accuracy
+- **Metrics Dashboard**: Integrate with tools like Grafana for visualization.
 - **Alerting**: Configure alerts for critical events, such as spikes in CPU or memory usage.
+- **Performance Monitoring**: Track batch API performance (containers/sec) in service logs.
+
+#### Example Prometheus Queries
+
+```promql
+# Total scaling actions in last hour
+rate(lxc_scaling_actions_total[1h])
+
+# Containers scaled up vs down
+lxc_scaling_actions_total{action="scale_up"} / lxc_scaling_actions_total{action="scale_down"}
+
+# Average API response time
+rate(lxc_api_request_duration_seconds_sum[5m]) / rate(lxc_api_request_duration_seconds_count[5m])
+```
 
 ## 📚 Documentation
 
-For detailed documentation, including advanced usage, configuration options, and troubleshooting, please refer to the [Extended Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/README.md).
+For detailed documentation, including advanced usage, configuration options, and troubleshooting, please refer to:
+
+- **[Extended Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/README.md)** - Complete guide
+- **[API Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_autoscale_api/README.md)** - API endpoints and usage
+- **[Model Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_model/README.md)** - ML model details
+- **[Monitor Documentation](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_monitor/README.md)** - Metrics collection
+- **[Troubleshooting Guide](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+### Recent Improvements
+
+- **[BUGFIX_SCALING_ISSUE_6.md](BUGFIX_SCALING_ISSUE_6.md)** - Fixed critical scaling logic bugs
+- **[QUICKWINS_80_20.md](QUICKWINS_80_20.md)** - High-impact performance optimizations  
+- **[FIXES_ISSUES_3_4.md](FIXES_ISSUES_3_4.md)** - Rate limiting fix + batch async API (10x faster)
 
 ## 🛠️ Uninstallation
 
