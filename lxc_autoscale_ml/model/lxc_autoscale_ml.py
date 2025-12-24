@@ -49,24 +49,42 @@ def main():
                 container_data = df[df["container_id"] == container_id]
                 latest_metrics = container_data.iloc[-1].copy()
 
-                # Fetch current CPU and RAM configuration from API
+                # Fetch current CPU and RAM configuration from API with retry logic
+                latest_metrics["current_cores"] = config["scaling"]["min_cpu_cores"]
+                latest_metrics["current_ram_mb"] = config["scaling"]["min_ram_mb"]
+                
                 try:
                     import requests
                     api_url = config["api"]["api_url"]
-                    response = requests.get(f"{api_url}/resource/vm/config?vm_id={container_id}", timeout=5)
-                    if response.status_code == 200:
-                        vm_config = response.json().get("data", {})
-                        latest_metrics["current_cores"] = vm_config.get("cores", config["scaling"]["min_cpu_cores"])
-                        latest_metrics["current_ram_mb"] = vm_config.get("memory_mb", config["scaling"]["min_ram_mb"])
-                        logging.debug(f"Container {container_id} current config: {vm_config.get('cores')} cores, {vm_config.get('memory_mb')} MB RAM")
-                    else:
-                        logging.warning(f"Could not fetch config for container {container_id}, using defaults")
-                        latest_metrics["current_cores"] = config["scaling"]["min_cpu_cores"]
-                        latest_metrics["current_ram_mb"] = config["scaling"]["min_ram_mb"]
+                    max_retries = 3
+                    retry_delay = 1
+                    
+                    for attempt in range(max_retries):
+                        try:
+                            response = requests.get(
+                                f"{api_url}/resource/vm/config?vm_id={container_id}", 
+                                timeout=5
+                            )
+                            if response.status_code == 200:
+                                vm_config = response.json().get("data", {})
+                                latest_metrics["current_cores"] = vm_config.get("cores", config["scaling"]["min_cpu_cores"])
+                                latest_metrics["current_ram_mb"] = vm_config.get("memory_mb", config["scaling"]["min_ram_mb"])
+                                logging.debug(f"Container {container_id} current config: {vm_config.get('cores')} cores, {vm_config.get('memory_mb')} MB RAM")
+                                break
+                            elif response.status_code >= 500 and attempt < max_retries - 1:
+                                logging.warning(f"API server error (attempt {attempt + 1}/{max_retries}), retrying...")
+                                time.sleep(retry_delay * (2 ** attempt))  # Exponential backoff
+                            else:
+                                logging.warning(f"Could not fetch config for container {container_id} (status {response.status_code}), using defaults")
+                                break
+                        except requests.RequestException as e:
+                            if attempt < max_retries - 1:
+                                logging.warning(f"API request failed (attempt {attempt + 1}/{max_retries}): {e}, retrying...")
+                                time.sleep(retry_delay * (2 ** attempt))
+                            else:
+                                logging.warning(f"API request failed after {max_retries} attempts: {e}, using defaults")
                 except Exception as e:
                     logging.warning(f"Error fetching config for container {container_id}: {e}, using defaults")
-                    latest_metrics["current_cores"] = config["scaling"]["min_cpu_cores"]
-                    latest_metrics["current_ram_mb"] = config["scaling"]["min_ram_mb"]
 
                 logging.debug(f"Latest metrics for container {container_id}: {latest_metrics.to_dict()}")
 
