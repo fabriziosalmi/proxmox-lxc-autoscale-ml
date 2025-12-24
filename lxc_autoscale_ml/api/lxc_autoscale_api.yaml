@@ -18,6 +18,17 @@ rate_limiting:
   # Maximum number of requests allowed per minute to prevent abuse.
   max_requests_per_minute: 60
 
+# Authentication Configuration
+authentication:
+  # Enable API key authentication for all endpoints (except /health/check and /metrics)
+  enabled: false  # Set to true in production
+  
+  # List of valid API keys - CHANGE THESE IN PRODUCTION!
+  # Generate secure keys with: python3 -c "import os; print(os.urandom(32).hex())"
+  api_keys: []
+    # Example:
+    # - "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6"
+
 logging:
   # Logging level that controls the verbosity of logs. Options include "DEBUG", "INFO", "WARNING", "ERROR", and "CRITICAL".
   level: "INFO"

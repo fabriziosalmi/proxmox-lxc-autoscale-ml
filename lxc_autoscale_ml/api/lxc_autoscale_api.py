@@ -10,6 +10,9 @@ from rate_limiting import rate_limit
 from error_handling import handle_error
 from lxc_management import LXCManager
 from utils import create_response
+from validation import validate_request, validate_vm_id, validate_cores, validate_memory, validate_disk_size, validate_snapshot_name
+from authentication import require_api_key
+from metrics import metrics_endpoint, record_api_request, record_scaling_action
 
 # Setup logging
 log_file = "/var/log/lxc_autoscale_api.log"
@@ -146,8 +149,9 @@ def home():
 
 @app.route('/scale/cores', methods=['POST'])
 @rate_limit
+@validate_request({'vm_id': validate_vm_id, 'cores': validate_cores})
 def set_cores():
-    data = request.json
+    data = request.validated_data
     vm_id = data['vm_id']
     cores = data['cores']
     logging.info(f"Setting {cores} cores for VM {vm_id}")
@@ -155,8 +159,9 @@ def set_cores():
 
 @app.route('/scale/ram', methods=['POST'])
 @rate_limit
+@validate_request({'vm_id': validate_vm_id, 'memory': validate_memory})
 def set_ram():
-    data = request.json
+    data = request.validated_data
     vm_id = data['vm_id']
     memory = data['memory']
     logging.info(f"Setting {memory} MB RAM for VM {vm_id}")
@@ -265,9 +270,10 @@ def check_vm_status_route():
 
 @app.route('/resource/vm/config', methods=['GET'])
 @rate_limit
+@validate_request({'vm_id': validate_vm_id})
 def get_vm_config_route():
     """Get current CPU cores and RAM configuration for a container"""
-    vm_id = request.args.get('vm_id')
+    vm_id = request.validated_data['vm_id']
     logging.info(f"Getting configuration for VM {vm_id}")
     try:
         lxc_manager = LXCManager()

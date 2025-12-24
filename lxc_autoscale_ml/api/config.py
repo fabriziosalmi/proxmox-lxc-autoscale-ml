@@ -19,6 +19,9 @@ def create_app(config=None):
     
     # Load the rate limiting configuration
     app.config['RATE_LIMITING'] = config.get('rate_limiting', {})
+    
+    # Load authentication configuration
+    app.config['AUTHENTICATION'] = config.get('authentication', {'enabled': False})
 
     # Flask settings
     app.secret_key = os.urandom(24)

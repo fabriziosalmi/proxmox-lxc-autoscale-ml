@@ -50,6 +50,7 @@ MAX_WORKERS = config['monitoring']['max_workers']
 EXCLUDED_DEVICES = config['monitoring']['excluded_devices']
 RETRY_LIMIT = config['monitoring'].get('retry_limit', 3)  # Maximum retry attempts
 RETRY_DELAY = config['monitoring'].get('retry_delay', 2)  # Delay between retries in seconds
+MAX_METRICS_ENTRIES = config['monitoring'].get('max_metrics_entries', 1000)  # Limit file size
 
 def get_running_lxc_containers() -> List[str]:
     """Retrieve a list of running LXC containers."""
@@ -302,13 +303,22 @@ async def load_existing_data(file_path: str) -> List[Dict[str, Any]]:
         return []
 
 async def write_metrics_to_file(file_path: str, data: List[Dict[str, Any]]):
-    """Write metrics data to a JSON file asynchronously."""
+    """
+    Write metrics data to a JSON file asynchronously with size limiting.
+    Keeps only the most recent MAX_METRICS_ENTRIES to prevent unbounded growth.
+    """
+    # Limit data size to prevent OOM and slow processing
+    if len(data) > MAX_METRICS_ENTRIES:
+        removed = len(data) - MAX_METRICS_ENTRIES
+        data = data[-MAX_METRICS_ENTRIES:]
+        logger.info(f"Rotated metrics: removed {removed} old entries, keeping last {MAX_METRICS_ENTRIES}")
+    
     temp_file = f"{file_path}.tmp"
     try:
         async with aiofiles.open(temp_file, mode='w') as json_file:
-            await json_file.write(json.dumps(data, indent=4))
+            await json_file.write(json.dumps(data, indent=4, sort_keys=True))
         os.replace(temp_file, file_path)
-        logger.info(f"Metrics successfully exported to {file_path}")
+        logger.info(f"Metrics successfully exported to {file_path} ({len(data)} entries)")
     except IOError as e:
         logger.error(f"Failed to write metrics to {file_path}: {e}")
         if os.path.exists(temp_file):

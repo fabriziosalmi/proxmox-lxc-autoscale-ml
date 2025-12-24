@@ -35,3 +35,12 @@ monitoring:
   
   # List of device types to exclude from I/O statistics collection.
   excluded_devices: ['loop', 'dm-']  # Devices to exclude in I/O stats
+  
+  # Maximum number of retry attempts for transient failures.
+  retry_limit: 3
+  
+  # Delay between retry attempts in seconds.
+  retry_delay: 2
+  
+  # Maximum number of metrics entries to keep in the export file (prevents unbounded growth).
+  max_metrics_entries: 1000  # Keeps last 1000 data points (~16 hours at 60s intervals)
