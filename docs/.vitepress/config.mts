@@ -3,6 +3,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: 'LXC AutoScale ML',
   description: 'ML-powered autoscaling for Proxmox LXC containers',
+  base: '/proxmox-lxc-autoscale-ml/',
 
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }],
