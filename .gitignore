@@ -1,1 +1,6 @@
 QUICKWINS_80_20.md
+
+# VitePress build output
+docs/.vitepress/dist
+docs/.vitepress/cache
+docs/node_modules
