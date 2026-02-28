@@ -37,7 +37,7 @@ Major release with critical bug fixes, performance improvements, and new enterpr
   - Prevents injection attacks and invalid operations
   - Clear error messages for debugging
   - Validation rules:
-    - `vm_id`: 100-999999
+    - `lxc_id`: 100-999999
     - `cores`: 1-128
     - `memory`: 64MB-1TB
     - `disk_size`: Positive integer
@@ -49,7 +49,7 @@ Major release with critical bug fixes, performance improvements, and new enterpr
   - Circuit breaker status and model predictions
   - Graceful degradation if prometheus-client not installed
 
-- **New Endpoint: `/resource/vm/config`**
+- **New Endpoint: `/resource/lxc/config`**
   - Fetch min/max CPU and RAM limits for containers
   - Used by ML model for batch config fetching
   - Returns current resource boundaries
@@ -295,13 +295,13 @@ If you have scripts or tools calling the API, update them to include authenticat
 
 **Before**:
 ```bash
-curl http://proxmox:5000/resource/vm/status?vm_id=104
+curl http://proxmox:5000/resource/lxc/status?lxc_id=104
 ```
 
 **After**:
 ```bash
 curl -H "X-API-Key: your-secret-key-here" \
-  http://proxmox:5000/resource/vm/status?vm_id=104
+  http://proxmox:5000/resource/lxc/status?lxc_id=104
 ```
 
 ### Monitoring

@@ -33,8 +33,8 @@ curl "http://localhost:5000/endpoint?api_key=your-key"
 | `/snapshot/rollback` | POST | Yes | Rollback snapshot |
 | `/clone/create` | POST | Yes | Clone container |
 | `/clone/delete` | DELETE | Yes | Delete container |
-| `/resource/vm/status` | GET | Yes | Container status |
-| `/resource/vm/config` | GET | Yes | Container config |
+| `/resource/lxc/status` | GET | Yes | Container status |
+| `/resource/lxc/config` | GET | Yes | Container config |
 | `/resource/node/status` | GET | Yes | Node status |
 
 ---
@@ -120,14 +120,14 @@ Set the number of CPU cores for a container.
 curl -X POST http://localhost:5000/scale/cores \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_KEY" \
-  -d '{"vm_id": 104, "cores": 4}'
+  -d '{"lxc_id": 104, "cores": 4}'
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
+| `lxc_id` | integer | Yes | 100-999999 |
 | `cores` | integer | Yes | 1-128 |
 
 **Response (200 OK):**
@@ -135,7 +135,7 @@ curl -X POST http://localhost:5000/scale/cores \
 ```json
 {
   "status": "success",
-  "message": "CPU cores set to 4 for VM 104"
+  "message": "CPU cores set to 4 for LXC 104"
 }
 ```
 
@@ -160,14 +160,14 @@ Set the amount of RAM for a container.
 curl -X POST http://localhost:5000/scale/ram \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_KEY" \
-  -d '{"vm_id": 104, "memory": 4096}'
+  -d '{"lxc_id": 104, "memory": 4096}'
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
+| `lxc_id` | integer | Yes | 100-999999 |
 | `memory` | integer | Yes | 64-1048576 (MB) |
 
 **Response (200 OK):**
@@ -175,7 +175,7 @@ curl -X POST http://localhost:5000/scale/ram \
 ```json
 {
   "status": "success",
-  "message": "Memory set to 4096 MB for VM 104"
+  "message": "Memory set to 4096 MB for LXC 104"
 }
 ```
 
@@ -191,14 +191,14 @@ Increase the storage size of a container's root filesystem.
 curl -X POST http://localhost:5000/scale/storage/increase \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_KEY" \
-  -d '{"vm_id": 104, "disk_size": 5}'
+  -d '{"lxc_id": 104, "disk_size": 5}'
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
+| `lxc_id` | integer | Yes | 100-999999 |
 | `disk_size` | integer | Yes | Positive integer (GB) |
 
 **Response (200 OK):**
@@ -206,7 +206,7 @@ curl -X POST http://localhost:5000/scale/storage/increase \
 ```json
 {
   "status": "success",
-  "message": "Storage increased by 5 GB for VM 104"
+  "message": "Storage increased by 5 GB for LXC 104"
 }
 ```
 
@@ -228,14 +228,14 @@ Create a snapshot of a container.
 curl -X POST http://localhost:5000/snapshot/create \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_KEY" \
-  -d '{"vm_id": 104, "snapshot_name": "backup_20241224"}'
+  -d '{"lxc_id": 104, "snapshot_name": "backup_20241224"}'
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
+| `lxc_id` | integer | Yes | 100-999999 |
 | `snapshot_name` | string | Yes | Alphanumeric, `_`, `-` (max 100 chars) |
 
 **Response (200 OK):**
@@ -243,7 +243,7 @@ curl -X POST http://localhost:5000/snapshot/create \
 ```json
 {
   "status": "success",
-  "message": "Snapshot 'backup_20241224' created for VM 104"
+  "message": "Snapshot 'backup_20241224' created for LXC 104"
 }
 ```
 
@@ -257,14 +257,14 @@ List all snapshots for a container.
 
 ```bash
 curl -H "X-API-Key: YOUR_KEY" \
-  "http://localhost:5000/snapshot/list?vm_id=104"
+  "http://localhost:5000/snapshot/list?lxc_id=104"
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
+| `lxc_id` | integer | Yes | 100-999999 |
 
 **Response (200 OK):**
 
@@ -293,14 +293,14 @@ Rollback a container to a specific snapshot.
 curl -X POST http://localhost:5000/snapshot/rollback \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_KEY" \
-  -d '{"vm_id": 104, "snapshot_name": "backup_20241224"}'
+  -d '{"lxc_id": 104, "snapshot_name": "backup_20241224"}'
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
+| `lxc_id` | integer | Yes | 100-999999 |
 | `snapshot_name` | string | Yes | Alphanumeric, `_`, `-` (max 100 chars) |
 
 **Response (200 OK):**
@@ -308,7 +308,7 @@ curl -X POST http://localhost:5000/snapshot/rollback \
 ```json
 {
   "status": "success",
-  "message": "Rolled back VM 104 to snapshot 'backup_20241224'"
+  "message": "Rolled back LXC 104 to snapshot 'backup_20241224'"
 }
 ```
 
@@ -330,23 +330,23 @@ Clone a container.
 curl -X POST http://localhost:5000/clone/create \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_KEY" \
-  -d '{"vm_id": 104, "new_vm_id": 105, "new_vm_name": "test_clone"}'
+  -d '{"lxc_id": 104, "new_lxc_id": 105, "new_lxc_name": "test_clone"}'
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
-| `new_vm_id` | integer | Yes | 100-999999 |
-| `new_vm_name` | string | Yes | Alphanumeric, `_`, `-` |
+| `lxc_id` | integer | Yes | 100-999999 |
+| `new_lxc_id` | integer | Yes | 100-999999 |
+| `new_lxc_name` | string | Yes | Alphanumeric, `_`, `-` |
 
 **Response (200 OK):**
 
 ```json
 {
   "status": "success",
-  "message": "Cloned VM 104 to new VM 105 (test_clone)"
+  "message": "Cloned LXC 104 to new LXC 105 (test_clone)"
 }
 ```
 
@@ -362,21 +362,21 @@ Delete a container.
 curl -X DELETE http://localhost:5000/clone/delete \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_KEY" \
-  -d '{"vm_id": 105}'
+  -d '{"lxc_id": 105}'
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
+| `lxc_id` | integer | Yes | 100-999999 |
 
 **Response (200 OK):**
 
 ```json
 {
   "status": "success",
-  "message": "Deleted VM 105"
+  "message": "Deleted LXC 105"
 }
 ```
 
@@ -388,7 +388,7 @@ This operation permanently deletes the container.
 
 ## Resource Information
 
-### GET /resource/vm/status
+### GET /resource/lxc/status
 
 Get resource allocation and usage for a container.
 
@@ -396,14 +396,14 @@ Get resource allocation and usage for a container.
 
 ```bash
 curl -H "X-API-Key: YOUR_KEY" \
-  "http://localhost:5000/resource/vm/status?vm_id=104"
+  "http://localhost:5000/resource/lxc/status?lxc_id=104"
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
+| `lxc_id` | integer | Yes | 100-999999 |
 
 **Response (200 OK):**
 
@@ -411,7 +411,7 @@ curl -H "X-API-Key: YOUR_KEY" \
 {
   "status": "success",
   "data": {
-    "vm_id": "104",
+    "lxc_id": "104",
     "status": "running",
     "cpu": 4,
     "memory": 8192,
@@ -423,7 +423,7 @@ curl -H "X-API-Key: YOUR_KEY" \
 
 ---
 
-### GET /resource/vm/config
+### GET /resource/lxc/config
 
 Get min/max resource limits for a container.
 
@@ -431,14 +431,14 @@ Get min/max resource limits for a container.
 
 ```bash
 curl -H "X-API-Key: YOUR_KEY" \
-  "http://localhost:5000/resource/vm/config?vm_id=104"
+  "http://localhost:5000/resource/lxc/config?lxc_id=104"
 ```
 
 **Parameters:**
 
 | Name | Type | Required | Validation |
 |------|------|----------|------------|
-| `vm_id` | integer | Yes | 100-999999 |
+| `lxc_id` | integer | Yes | 100-999999 |
 
 **Response (200 OK):**
 
@@ -446,11 +446,11 @@ curl -H "X-API-Key: YOUR_KEY" \
 {
   "status": "success",
   "data": {
-    "vm_id": "104",
+    "lxc_id": "104",
     "cores": 4,
     "memory_mb": 8192
   },
-  "message": "Successfully retrieved configuration for VM 104"
+  "message": "Successfully retrieved configuration for LXC 104"
 }
 ```
 
@@ -500,7 +500,7 @@ Invalid parameters:
 ```json
 {
   "status": "error",
-  "error": "Invalid vm_id: must be between 100 and 999999"
+  "error": "Invalid lxc_id: must be between 100 and 999999"
 }
 ```
 

@@ -73,7 +73,7 @@ class AsyncAPIClient:
             logging.debug(f"Circuit breaker open for container {container_id}, skipping API call")
             return (container_id, None)
         
-        url = f"{self.base_url}/resource/vm/config?vm_id={container_id}"
+        url = f"{self.base_url}/resource/lxc/config?lxc_id={container_id}"
         
         async with self.semaphore:  # Limit concurrent requests
             for attempt in range(retry_count):

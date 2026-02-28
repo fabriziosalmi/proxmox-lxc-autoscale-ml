@@ -4,13 +4,13 @@ from config import create_app
 from scaling import scale_cpu, scale_ram, resize_storage
 from snapshot_management import create_snapshot, list_snapshots, rollback_snapshot
 from cloning_management import create_clone, delete_clone
-from resource_checking import check_vm_status, check_node_status, check_cluster_status
+from resource_checking import check_lxc_status, check_node_status, check_cluster_status
 from health_check import health_check
 from rate_limiting import rate_limit
 from error_handling import handle_error
 from lxc_management import LXCManager
 from utils import create_response
-from validation import validate_request, validate_vm_id, validate_cores, validate_memory, validate_disk_size, validate_snapshot_name
+from validation import validate_request, validate_lxc_id, validate_cores, validate_memory, validate_disk_size, validate_snapshot_name
 from authentication import require_api_key
 from metrics import metrics_endpoint, record_api_request, record_scaling_action
 
@@ -63,55 +63,55 @@ def home():
                         <td>/scale/cores</td>
                         <td>POST</td>
                         <td>Set the exact number of CPU cores for an LXC container.</td>
-                        <td><code>curl -X POST http://proxmox:5000/scale/cores -H "Content-Type: application/json" -d '{"vm_id": 104, "cores": 4}'</code></td>
+                        <td><code>curl -X POST http://proxmox:5000/scale/cores -H "Content-Type: application/json" -d '{"lxc_id": 104, "cores": 4}'</code></td>
                     </tr>
                     <tr>
                         <td>/scale/ram</td>
                         <td>POST</td>
                         <td>Set the exact amount of RAM for an LXC container.</td>
-                        <td><code>curl -X POST http://proxmox:5000/scale/ram -H "Content-Type: application/json" -d '{"vm_id": 104, "memory": 4096}'</code></td>
+                        <td><code>curl -X POST http://proxmox:5000/scale/ram -H "Content-Type: application/json" -d '{"lxc_id": 104, "memory": 4096}'</code></td>
                     </tr>
                     <tr>
                         <td>/scale/storage/increase</td>
                         <td>POST</td>
                         <td>Increase the storage size of an LXC container's root filesystem.</td>
-                        <td><code>curl -X POST http://proxmox:5000/scale/storage/increase -H "Content-Type: application/json" -d '{"vm_id": 104, "disk_size": 2}'</code></td>
+                        <td><code>curl -X POST http://proxmox:5000/scale/storage/increase -H "Content-Type: application/json" -d '{"lxc_id": 104, "disk_size": 2}'</code></td>
                     </tr>
                     <tr>
                         <td>/snapshot/create</td>
                         <td>POST</td>
                         <td>Create a snapshot for an LXC container.</td>
-                        <td><code>curl -X POST http://proxmox:5000/snapshot/create -H "Content-Type: application/json" -d '{"vm_id": 104, "snapshot_name": "my_snapshot"}'</code></td>
+                        <td><code>curl -X POST http://proxmox:5000/snapshot/create -H "Content-Type: application/json" -d '{"lxc_id": 104, "snapshot_name": "my_snapshot"}'</code></td>
                     </tr>
                     <tr>
                         <td>/snapshot/list</td>
                         <td>GET</td>
                         <td>List all snapshots for an LXC container.</td>
-                        <td><code>curl -X GET "http://proxmox:5000/snapshot/list?vm_id=104"</code></td>
+                        <td><code>curl -X GET "http://proxmox:5000/snapshot/list?lxc_id=104"</code></td>
                     </tr>
                     <tr>
                         <td>/snapshot/rollback</td>
                         <td>POST</td>
                         <td>Rollback to a specific snapshot.</td>
-                        <td><code>curl -X POST http://proxmox:5000/snapshot/rollback -H "Content-Type: application/json" -d '{"vm_id": 104, "snapshot_name": "my_snapshot"}'</code></td>
+                        <td><code>curl -X POST http://proxmox:5000/snapshot/rollback -H "Content-Type: application/json" -d '{"lxc_id": 104, "snapshot_name": "my_snapshot"}'</code></td>
                     </tr>
                     <tr>
                         <td>/clone/create</td>
                         <td>POST</td>
                         <td>Clone an LXC container.</td>
-                        <td><code>curl -X POST http://proxmox:5000/clone/create -H "Content-Type: application/json" -d '{"vm_id": 104, "new_vm_id": 105, "new_vm_name": "cloned_container"}'</code></td>
+                        <td><code>curl -X POST http://proxmox:5000/clone/create -H "Content-Type: application/json" -d '{"lxc_id": 104, "new_lxc_id": 105, "new_lxc_name": "cloned_container"}'</code></td>
                     </tr>
                     <tr>
                         <td>/clone/delete</td>
                         <td>DELETE</td>
                         <td>Delete a cloned LXC container.</td>
-                        <td><code>curl -X DELETE http://proxmox:5000/clone/delete -H "Content-Type: application/json" -d '{"vm_id": 105}'</code></td>
+                        <td><code>curl -X DELETE http://proxmox:5000/clone/delete -H "Content-Type: application/json" -d '{"lxc_id": 105}'</code></td>
                     </tr>
                     <tr>
-                        <td>/resource/vm/status</td>
+                        <td>/resource/lxc/status</td>
                         <td>GET</td>
                         <td>Check the resource allocation and usage for an LXC container.</td>
-                        <td><code>curl -X GET "http://proxmox:5000/resource/vm/status?vm_id=104"</code></td>
+                        <td><code>curl -X GET "http://proxmox:5000/resource/lxc/status?lxc_id=104"</code></td>
                     </tr>
                     <tr>
                         <td>/resource/node/status</td>
@@ -149,86 +149,86 @@ def home():
 
 @app.route('/scale/cores', methods=['POST'])
 @rate_limit
-@validate_request({'vm_id': validate_vm_id, 'cores': validate_cores})
+@validate_request({'lxc_id': validate_lxc_id, 'cores': validate_cores})
 def set_cores():
     data = request.validated_data
-    vm_id = data['vm_id']
+    lxc_id = data['lxc_id']
     cores = data['cores']
-    logging.info(f"Setting {cores} cores for VM {vm_id}")
-    return scale_cpu(vm_id, cores)
+    logging.info(f"Setting {cores} cores for LXC {lxc_id}")
+    return scale_cpu(lxc_id, cores)
 
 @app.route('/scale/ram', methods=['POST'])
 @rate_limit
-@validate_request({'vm_id': validate_vm_id, 'memory': validate_memory})
+@validate_request({'lxc_id': validate_lxc_id, 'memory': validate_memory})
 def set_ram():
     data = request.validated_data
-    vm_id = data['vm_id']
+    lxc_id = data['lxc_id']
     memory = data['memory']
-    logging.info(f"Setting {memory} MB RAM for VM {vm_id}")
-    return scale_ram(vm_id, memory)
+    logging.info(f"Setting {memory} MB RAM for LXC {lxc_id}")
+    return scale_ram(lxc_id, memory)
 
 @app.route('/scale/storage/increase', methods=['POST'])
 @rate_limit
 def increase_storage():
     data = request.json
-    vm_id = data['vm_id']
+    lxc_id = data['lxc_id']
     disk_size = data['disk_size']
-    logging.info(f"Increasing storage by {disk_size} GB for VM {vm_id}")
-    return resize_storage(vm_id, disk_size)
+    logging.info(f"Increasing storage by {disk_size} GB for LXC {lxc_id}")
+    return resize_storage(lxc_id, disk_size)
 
 @app.route('/snapshot/create', methods=['POST'])
 @rate_limit
 def create_snapshot_route():
     data = request.json
-    vm_id = data['vm_id']
+    lxc_id = data['lxc_id']
     snapshot_name = data['snapshot_name']
-    logging.info(f"Creating snapshot '{snapshot_name}' for VM {vm_id}")
-    return create_snapshot(vm_id, snapshot_name)
+    logging.info(f"Creating snapshot '{snapshot_name}' for LXC {lxc_id}")
+    return create_snapshot(lxc_id, snapshot_name)
 
 @app.route('/snapshot/list', methods=['GET'])
 @rate_limit
 def list_snapshots_route():
-    vm_id = request.args.get('vm_id')
-    return list_snapshots(vm_id)
+    lxc_id = request.args.get('lxc_id')
+    return list_snapshots(lxc_id)
 
 @app.route('/snapshot/rollback', methods=['POST'])
 @rate_limit
 def rollback_snapshot_route():
     data = request.json
-    vm_id = data['vm_id']
+    lxc_id = data['lxc_id']
     snapshot_name = data['snapshot_name']
-    return rollback_snapshot(vm_id, snapshot_name)
+    return rollback_snapshot(lxc_id, snapshot_name)
 
 @app.route('/clone/create', methods=['POST'])
 @rate_limit
 def create_clone():
     data = request.json
-    vm_id = data['vm_id']
-    new_vm_id = data['new_vm_id']
-    new_vm_name = data['new_vm_name'].replace('_', '-')  # Replace underscores with hyphens
-    snapshot_name = f"snapshot-{new_vm_id}"  # Create a unique snapshot name
+    lxc_id = data['lxc_id']
+    new_lxc_id = data['new_lxc_id']
+    new_lxc_name = data['new_lxc_name'].replace('_', '-')  # Replace underscores with hyphens
+    snapshot_name = f"snapshot-{new_lxc_id}"  # Create a unique snapshot name
 
     try:
         lxc_manager = LXCManager()
 
         # Step 1: Create a snapshot
-        lxc_manager.create_snapshot(vm_id, snapshot_name)
-        logging.info(f"Creating snapshot of VM {vm_id} with name '{snapshot_name}'")
+        lxc_manager.create_snapshot(lxc_id, snapshot_name)
+        logging.info(f"Creating snapshot of LXC {lxc_id} with name '{snapshot_name}'")
 
         # Step 2: Clone the container from the snapshot
-        lxc_manager.clone_container(vm_id, new_vm_id, new_vm_name, snapshot_name)
-        logging.info(f"Cloning VM {vm_id} to new VM {new_vm_id} with name '{new_vm_name}'")
+        lxc_manager.clone_container(lxc_id, new_lxc_id, new_lxc_name, snapshot_name)
+        logging.info(f"Cloning LXC {lxc_id} to new LXC {new_lxc_id} with name '{new_lxc_name}'")
 
         # Step 3: Start the cloned container
-        lxc_manager.start_container(new_vm_id)
-        logging.info(f"Starting clone VM {new_vm_id} with name '{new_vm_name}'")
+        lxc_manager.start_container(new_lxc_id)
+        logging.info(f"Starting clone LXC {new_lxc_id} with name '{new_lxc_name}'")
 
         # Step 4: Delete the snapshot
-        lxc_manager.delete_snapshot(vm_id, snapshot_name)
-        logging.info(f"Deleting snapshot of VM {vm_id} with name '{snapshot_name}'")
+        lxc_manager.delete_snapshot(lxc_id, snapshot_name)
+        logging.info(f"Deleting snapshot of LXC {lxc_id} with name '{snapshot_name}'")
 
         return create_response(
-            data=f"Container {new_vm_id} cloned from {vm_id} and started successfully. Snapshot {snapshot_name} removed.",
+            data=f"Container {new_lxc_id} cloned from {lxc_id} and started successfully. Snapshot {snapshot_name} removed.",
             message="Clone operation completed successfully.",
             status_code=200
         )
@@ -239,21 +239,21 @@ def create_clone():
 @app.route('/clone/delete', methods=['DELETE'])
 @rate_limit
 def delete_clone_route():
-    vm_id = request.json['vm_id']
+    lxc_id = request.json['lxc_id']
 
     try:
         lxc_manager = LXCManager()
 
         # Step 1: Stop the container
-        lxc_manager.stop_container(vm_id)
-        logging.info(f"Stopping VM {new_vm_id}")
+        lxc_manager.stop_container(lxc_id)
+        logging.info(f"Stopping LXC {new_lxc_id}")
 
         # Step 2: Destroy the container
-        lxc_manager.destroy_container(vm_id)
-        logging.info(f"Destroying VM {new_vm_id}")
+        lxc_manager.destroy_container(lxc_id)
+        logging.info(f"Destroying LXC {new_lxc_id}")
 
         return create_response(
-            data=f"Container {vm_id} stopped and destroyed successfully.",
+            data=f"Container {lxc_id} stopped and destroyed successfully.",
             message="Delete operation completed successfully.",
             status_code=200
         )
@@ -261,26 +261,26 @@ def delete_clone_route():
         return handle_error(e)
 
 
-@app.route('/resource/vm/status', methods=['GET'])
+@app.route('/resource/lxc/status', methods=['GET'])
 @rate_limit
-def check_vm_status_route():
-    vm_id = request.args.get('vm_id')
-    logging.info(f"Checking status for VM {vm_id}")
-    return check_vm_status(vm_id)
+def check_lxc_status_route():
+    lxc_id = request.args.get('lxc_id')
+    logging.info(f"Checking status for LXC {lxc_id}")
+    return check_lxc_status(lxc_id)
 
-@app.route('/resource/vm/config', methods=['GET'])
+@app.route('/resource/lxc/config', methods=['GET'])
 @rate_limit
-@validate_request({'vm_id': validate_vm_id})
-def get_vm_config_route():
+@validate_request({'lxc_id': validate_lxc_id})
+def get_lxc_config_route():
     """Get current CPU cores and RAM configuration for a container"""
-    vm_id = request.validated_data['vm_id']
-    logging.info(f"Getting configuration for VM {vm_id}")
+    lxc_id = request.validated_data['lxc_id']
+    logging.info(f"Getting configuration for LXC {lxc_id}")
     try:
         lxc_manager = LXCManager()
-        cores, memory = lxc_manager.get_current_resources(vm_id)
+        cores, memory = lxc_manager.get_current_resources(lxc_id)
         return create_response(
-            data={"vm_id": vm_id, "cores": cores, "memory_mb": memory},
-            message=f"Successfully retrieved configuration for VM {vm_id}",
+            data={"lxc_id": lxc_id, "cores": cores, "memory_mb": memory},
+            message=f"Successfully retrieved configuration for LXC {lxc_id}",
             status_code=200
         )
     except Exception as e:

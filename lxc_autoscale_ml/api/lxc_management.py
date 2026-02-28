@@ -28,46 +28,46 @@ class LXCManager:
             raise Exception("Command timed out")
 
 
-    def stop_container(self, vm_id):
-        command = f"pct stop {vm_id}"
+    def stop_container(self, lxc_id):
+        command = f"pct stop {lxc_id}"
         return self._run_command(command)
 
-    def destroy_container(self, vm_id):
-        command = f"pct destroy {vm_id}"
+    def destroy_container(self, lxc_id):
+        command = f"pct destroy {lxc_id}"
         return self._run_command(command)
 
-    def create_temporary_snapshot(self, vm_id):
-        snapshot_name = f"migrate-snapshot-{vm_id}"
-        command = f"pct snapshot {vm_id} {snapshot_name}"
+    def create_temporary_snapshot(self, lxc_id):
+        snapshot_name = f"migrate-snapshot-{lxc_id}"
+        command = f"pct snapshot {lxc_id} {snapshot_name}"
         self._run_command(command)
         return snapshot_name
 
-    def delete_snapshot(self, vm_id, snapshot_name):
-        command = f"pct delsnapshot {vm_id} {snapshot_name}"
+    def delete_snapshot(self, lxc_id, snapshot_name):
+        command = f"pct delsnapshot {lxc_id} {snapshot_name}"
         self._run_command(command)
 
-    def migrate_container(self, vm_id, target_node):
+    def migrate_container(self, lxc_id, target_node):
         # Check for non-migratable snapshots or create a new one for migration
-        snapshot_name = self.create_temporary_snapshot(vm_id)
+        snapshot_name = self.create_temporary_snapshot(lxc_id)
         
         try:
-            command = f"pct migrate {vm_id} {target_node}"
+            command = f"pct migrate {lxc_id} {target_node}"
             self._run_command(command)
         finally:
             # Clean up the temporary snapshot after migration
-            self.delete_snapshot(vm_id, snapshot_name)
+            self.delete_snapshot(lxc_id, snapshot_name)
 
-    def scale_cpu(self, vm_id, cores):
-        command = f"pct set {vm_id} -cores {cores}"
+    def scale_cpu(self, lxc_id, cores):
+        command = f"pct set {lxc_id} -cores {cores}"
         return self._run_command(command)
 
-    def scale_ram(self, vm_id, memory):
-        command = f"pct set {vm_id} -memory {memory}"
+    def scale_ram(self, lxc_id, memory):
+        command = f"pct set {lxc_id} -memory {memory}"
         return self._run_command(command)
 
-    def get_current_disk_size(self, vm_id):
+    def get_current_disk_size(self, lxc_id):
         # Retrieve the current size of the root filesystem in GB
-        command = f"pct config {vm_id}"
+        command = f"pct config {lxc_id}"
         output = self._run_command(command)
         for line in output.splitlines():
             if line.startswith("rootfs:"):
@@ -75,9 +75,9 @@ class LXCManager:
                 return int(current_size)
         raise Exception("Failed to retrieve current disk size")
     
-    def get_current_resources(self, vm_id):
+    def get_current_resources(self, lxc_id):
         """Retrieve current CPU cores and memory (MB) for a container"""
-        command = f"pct config {vm_id}"
+        command = f"pct config {lxc_id}"
         output = self._run_command(command)
         cores = None
         memory = None
@@ -87,43 +87,43 @@ class LXCManager:
             elif line.startswith("memory:"):
                 memory = int(line.split(":")[1].strip())
         if cores is None or memory is None:
-            raise Exception(f"Failed to retrieve current resources for container {vm_id}")
+            raise Exception(f"Failed to retrieve current resources for container {lxc_id}")
         return cores, memory
 
-    def resize_storage(self, vm_id, disk_size):
-        current_size = self.get_current_disk_size(vm_id)
+    def resize_storage(self, lxc_id, disk_size):
+        current_size = self.get_current_disk_size(lxc_id)
         new_size = current_size + disk_size
-        command = f"pct resize {vm_id} rootfs {new_size}G"
+        command = f"pct resize {lxc_id} rootfs {new_size}G"
         return self._run_command(command)
 
-    def create_snapshot(self, vm_id, snapshot_name):
-        command = f"pct snapshot {vm_id} {snapshot_name}"
+    def create_snapshot(self, lxc_id, snapshot_name):
+        command = f"pct snapshot {lxc_id} {snapshot_name}"
         return self._run_command(command)
 
-    def clone_container(self, vm_id, new_vm_id, new_vm_name, snapshot_name):
-        command = f"pct clone {vm_id} {new_vm_id} --hostname {new_vm_name} --snapname {snapshot_name}"
+    def clone_container(self, lxc_id, new_lxc_id, new_lxc_name, snapshot_name):
+        command = f"pct clone {lxc_id} {new_lxc_id} --hostname {new_lxc_name} --snapname {snapshot_name}"
         return self._run_command(command)
 
-    def start_container(self, vm_id):
-        command = f"pct start {vm_id}"
+    def start_container(self, lxc_id):
+        command = f"pct start {lxc_id}"
         return self._run_command(command)
 
-    def list_snapshots(self, vm_id):
-        command = f"pct listsnapshot {vm_id}"
+    def list_snapshots(self, lxc_id):
+        command = f"pct listsnapshot {lxc_id}"
         return self._run_command(command)
 
-    def rollback_snapshot(self, vm_id, snapshot_name):
-        command = f"pct rollback {vm_id} {snapshot_name}"
+    def rollback_snapshot(self, lxc_id, snapshot_name):
+        command = f"pct rollback {lxc_id} {snapshot_name}"
         return self._run_command(command)
 
-    def clone(self, vm_id, new_vm_id, new_vm_name):
-        command = f"pct clone {vm_id} {new_vm_id} --hostname {new_vm_name} --full"
+    def clone(self, lxc_id, new_lxc_id, new_lxc_name):
+        command = f"pct clone {lxc_id} {new_lxc_id} --hostname {new_lxc_name} --full"
         return self._run_command(command)
 
-    def delete_container(self, vm_id):
-        command = f"pct stop {vm_id} && pct destroy {vm_id}"
+    def delete_container(self, lxc_id):
+        command = f"pct stop {lxc_id} && pct destroy {lxc_id}"
         return self._run_command(command)
 
-    def migrate(self, vm_id, target_node):
-        command = f"pct migrate {vm_id} {target_node}"
+    def migrate(self, lxc_id, target_node):
+        command = f"pct migrate {lxc_id} {target_node}"
         return self._run_command(command)

@@ -13,13 +13,13 @@ Increase cores during business hours, reduce after hours:
 0 8 * * * curl -X POST http://proxmox:5000/scale/cores \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"vm_id": 104, "cores": 8}'
+  -d '{"lxc_id": 104, "cores": 8}'
 
 # Decrease to 4 cores at 8:00 PM
 0 20 * * * curl -X POST http://proxmox:5000/scale/cores \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"vm_id": 104, "cores": 4}'
+  -d '{"lxc_id": 104, "cores": 4}'
 ```
 
 ### Automated Memory Management
@@ -31,13 +31,13 @@ Adjust RAM based on workload patterns:
 0 9 * * * curl -X POST http://proxmox:5000/scale/ram \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"vm_id": 104, "memory": 8192}'
+  -d '{"lxc_id": 104, "memory": 8192}'
 
 # Decrease RAM at 7:00 PM
 0 19 * * * curl -X POST http://proxmox:5000/scale/ram \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"vm_id": 104, "memory": 4096}'
+  -d '{"lxc_id": 104, "memory": 4096}'
 ```
 
 ### Daily Snapshot Creation
@@ -48,7 +48,7 @@ Create a snapshot at 6:00 AM daily:
 0 6 * * * curl -X POST http://proxmox:5000/snapshot/create \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"vm_id": 104, "snapshot_name": "daily_backup_'$(date +\%Y\%m\%d)'"}'
+  -d '{"lxc_id": 104, "snapshot_name": "daily_backup_'$(date +\%Y\%m\%d)'"}'
 ```
 
 ### Resource Monitoring and Logging
@@ -57,7 +57,7 @@ Log container status every hour:
 
 ```bash
 0 * * * * curl -H "X-API-Key: YOUR_API_KEY" \
-  "http://proxmox:5000/resource/vm/status?vm_id=104" \
+  "http://proxmox:5000/resource/lxc/status?lxc_id=104" \
   >> /var/log/container_104_status.log
 ```
 
@@ -92,20 +92,20 @@ CONTAINERS=(101 102 103 104 105)
 CORES=4
 MEMORY=4096
 
-for VMID in "${CONTAINERS[@]}"; do
-  echo "Scaling container $VMID..."
+for LXCID in "${CONTAINERS[@]}"; do
+  echo "Scaling container $LXCID..."
 
   curl -s -X POST "$API_URL/scale/cores" \
     -H "Content-Type: application/json" \
     -H "X-API-Key: $API_KEY" \
-    -d "{\"vm_id\": $VMID, \"cores\": $CORES}"
+    -d "{\"lxc_id\": $LXCID, \"cores\": $CORES}"
 
   curl -s -X POST "$API_URL/scale/ram" \
     -H "Content-Type: application/json" \
     -H "X-API-Key: $API_KEY" \
-    -d "{\"vm_id\": $VMID, \"memory\": $MEMORY}"
+    -d "{\"lxc_id\": $LXCID, \"memory\": $MEMORY}"
 
-  echo "Container $VMID scaled to $CORES cores and $MEMORY MB RAM"
+  echo "Container $LXCID scaled to $CORES cores and $MEMORY MB RAM"
 done
 ```
 
@@ -123,16 +123,16 @@ echo "Generated: $(date)"
 echo ""
 
 # Get list of container IDs from Proxmox
-for VMID in $(pct list | tail -n +2 | awk '{print $1}'); do
+for LXCID in $(pct list | tail -n +2 | awk '{print $1}'); do
   RESPONSE=$(curl -s -H "X-API-Key: $API_KEY" \
-    "$API_URL/resource/vm/status?vm_id=$VMID")
+    "$API_URL/resource/lxc/status?lxc_id=$LXCID")
 
   if echo "$RESPONSE" | jq -e '.status == "success"' > /dev/null 2>&1; then
-    NAME=$(pct config $VMID | grep hostname | awk '{print $2}')
+    NAME=$(pct config $LXCID | grep hostname | awk '{print $2}')
     CPU=$(echo "$RESPONSE" | jq -r '.data.cpu // "N/A"')
     MEM=$(echo "$RESPONSE" | jq -r '.data.memory // "N/A"')
 
-    printf "%-6s %-20s CPU: %-5s MEM: %s\n" "$VMID" "$NAME" "$CPU" "$MEM"
+    printf "%-6s %-20s CPU: %-5s MEM: %s\n" "$LXCID" "$NAME" "$CPU" "$MEM"
   fi
 done
 ```
@@ -145,11 +145,11 @@ done
 
 API_KEY="your-api-key"
 API_URL="http://localhost:5000"
-VMID=$1
+LXCID=$1
 SNAPSHOT_NAME="pre_deploy_$(date +%Y%m%d_%H%M%S)"
 
-if [ -z "$VMID" ]; then
-  echo "Usage: $0 <vm_id>"
+if [ -z "$LXCID" ]; then
+  echo "Usage: $0 <lxc_id>"
   exit 1
 fi
 
@@ -157,20 +157,20 @@ echo "Creating snapshot: $SNAPSHOT_NAME"
 curl -s -X POST "$API_URL/snapshot/create" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d "{\"vm_id\": $VMID, \"snapshot_name\": \"$SNAPSHOT_NAME\"}"
+  -d "{\"lxc_id\": $LXCID, \"snapshot_name\": \"$SNAPSHOT_NAME\"}"
 
 echo "Scaling up resources for deployment..."
 curl -s -X POST "$API_URL/scale/cores" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d "{\"vm_id\": $VMID, \"cores\": 8}"
+  -d "{\"lxc_id\": $LXCID, \"cores\": 8}"
 
 curl -s -X POST "$API_URL/scale/ram" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d "{\"vm_id\": $VMID, \"memory\": 16384}"
+  -d "{\"lxc_id\": $LXCID, \"memory\": 16384}"
 
-echo "Container $VMID ready for deployment"
+echo "Container $LXCID ready for deployment"
 echo "Rollback snapshot: $SNAPSHOT_NAME"
 ```
 
@@ -182,20 +182,20 @@ echo "Rollback snapshot: $SNAPSHOT_NAME"
 
 API_KEY="your-api-key"
 API_URL="http://localhost:5000"
-VMID=$1
+LXCID=$1
 DAYS_OLD=7
 
-if [ -z "$VMID" ]; then
-  echo "Usage: $0 <vm_id>"
+if [ -z "$LXCID" ]; then
+  echo "Usage: $0 <lxc_id>"
   exit 1
 fi
 
 CUTOFF=$(date -d "$DAYS_OLD days ago" +%Y%m%d)
 
-echo "Cleaning snapshots older than $DAYS_OLD days for container $VMID"
+echo "Cleaning snapshots older than $DAYS_OLD days for container $LXCID"
 
 SNAPSHOTS=$(curl -s -H "X-API-Key: $API_KEY" \
-  "$API_URL/snapshot/list?vm_id=$VMID" | jq -r '.data[]?.name // empty')
+  "$API_URL/snapshot/list?lxc_id=$LXCID" | jq -r '.data[]?.name // empty')
 
 for SNAP in $SNAPSHOTS; do
   # Extract date from snapshot name (assumes format: name_YYYYMMDD)
@@ -303,11 +303,11 @@ groups:
 
 API_KEY="your-api-key"
 API_URL="http://localhost:5000"
-SOURCE_VMID=$1
-TEST_VMID=$((SOURCE_VMID + 1000))
+SOURCE_LXCID=$1
+TEST_LXCID=$((SOURCE_LXCID + 1000))
 
-if [ -z "$SOURCE_VMID" ]; then
-  echo "Usage: $0 <source_vm_id>"
+if [ -z "$SOURCE_LXCID" ]; then
+  echo "Usage: $0 <source_lxc_id>"
   exit 1
 fi
 
@@ -315,7 +315,7 @@ echo "Creating test clone..."
 curl -s -X POST "$API_URL/clone/create" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d "{\"vm_id\": $SOURCE_VMID, \"new_vm_id\": $TEST_VMID, \"new_vm_name\": \"test_clone\"}"
+  -d "{\"lxc_id\": $SOURCE_LXCID, \"new_lxc_id\": $TEST_LXCID, \"new_lxc_name\": \"test_clone\"}"
 
 echo "Waiting for clone to be ready..."
 sleep 30
@@ -327,7 +327,7 @@ echo "Cleaning up test clone..."
 curl -s -X DELETE "$API_URL/clone/delete" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
-  -d "{\"vm_id\": $TEST_VMID}"
+  -d "{\"lxc_id\": $TEST_LXCID}"
 
 echo "Test workflow complete"
 ```

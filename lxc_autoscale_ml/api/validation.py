@@ -7,26 +7,26 @@ class ValidationError(Exception):
     """Custom exception for validation errors."""
     pass
 
-def validate_vm_id(vm_id):
+def validate_lxc_id(lxc_id):
     """
-    Validate VM/Container ID.
+    Validate LXC Container ID.
     
     Args:
-        vm_id: VM ID to validate (can be str or int)
+        lxc_id: LXC ID to validate (can be str or int)
         
     Returns:
-        int: Validated VM ID
+        int: Validated LXC ID
         
     Raises:
-        ValidationError: If VM ID is invalid
+        ValidationError: If LXC ID is invalid
     """
     try:
-        vm_id_int = int(vm_id)
-        if vm_id_int < 100 or vm_id_int > 999999:
-            raise ValidationError(f"VM ID must be between 100 and 999999, got {vm_id_int}")
-        return vm_id_int
+        lxc_id_int = int(lxc_id)
+        if lxc_id_int < 100 or lxc_id_int > 999999:
+            raise ValidationError(f"LXC ID must be between 100 and 999999, got {lxc_id_int}")
+        return lxc_id_int
     except (ValueError, TypeError):
-        raise ValidationError(f"Invalid VM ID format: {vm_id}")
+        raise ValidationError(f"Invalid LXC ID format: {lxc_id}")
 
 def validate_cores(cores):
     """
@@ -150,7 +150,7 @@ def validate_request(validation_rules):
         
     Example:
         @validate_request({
-            'vm_id': validate_vm_id,
+            'lxc_id': validate_lxc_id,
             'cores': validate_cores
         })
         def scale_cores():

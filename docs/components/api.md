@@ -97,7 +97,7 @@ All parameters are validated to prevent injection attacks.
 
 | Parameter | Validation |
 |-----------|------------|
-| `vm_id` | Integer between 100 and 999999 |
+| `lxc_id` | Integer between 100 and 999999 |
 | `cores` | Integer between 1 and 128 |
 | `memory` | Integer between 64 (MB) and 1048576 (1 TB) |
 | `disk_size` | Positive integer (GB) |
@@ -142,7 +142,7 @@ POST /scale/cores
 curl -X POST http://localhost:5000/scale/cores \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"vm_id": 104, "cores": 4}'
+  -d '{"lxc_id": 104, "cores": 4}'
 ```
 
 **Response:**
@@ -150,7 +150,7 @@ curl -X POST http://localhost:5000/scale/cores \
 ```json
 {
   "status": "success",
-  "message": "CPU cores set to 4 for VM 104"
+  "message": "CPU cores set to 4 for LXC 104"
 }
 ```
 
@@ -166,7 +166,7 @@ POST /scale/ram
 curl -X POST http://localhost:5000/scale/ram \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"vm_id": 104, "memory": 4096}'
+  -d '{"lxc_id": 104, "memory": 4096}'
 ```
 
 ### Increase Storage
@@ -181,7 +181,7 @@ POST /scale/storage/increase
 curl -X POST http://localhost:5000/scale/storage/increase \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"vm_id": 104, "disk_size": 5}'
+  -d '{"lxc_id": 104, "disk_size": 5}'
 ```
 
 ### Create Snapshot
@@ -196,18 +196,18 @@ POST /snapshot/create
 curl -X POST http://localhost:5000/snapshot/create \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"vm_id": 104, "snapshot_name": "backup_20241224"}'
+  -d '{"lxc_id": 104, "snapshot_name": "backup_20241224"}'
 ```
 
 ### List Snapshots
 
 ```
-GET /snapshot/list?vm_id=<id>
+GET /snapshot/list?lxc_id=<id>
 ```
 
 ```bash
 curl -H "X-API-Key: your-key" \
-  "http://localhost:5000/snapshot/list?vm_id=104"
+  "http://localhost:5000/snapshot/list?lxc_id=104"
 ```
 
 ### Rollback Snapshot
@@ -220,7 +220,7 @@ POST /snapshot/rollback
 curl -X POST http://localhost:5000/snapshot/rollback \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"vm_id": 104, "snapshot_name": "backup_20241224"}'
+  -d '{"lxc_id": 104, "snapshot_name": "backup_20241224"}'
 ```
 
 ### Clone Container
@@ -233,7 +233,7 @@ POST /clone/create
 curl -X POST http://localhost:5000/clone/create \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"vm_id": 104, "new_vm_id": 105, "new_vm_name": "test_clone"}'
+  -d '{"lxc_id": 104, "new_lxc_id": 105, "new_lxc_name": "test_clone"}'
 ```
 
 ### Delete Clone
@@ -246,31 +246,31 @@ DELETE /clone/delete
 curl -X DELETE http://localhost:5000/clone/delete \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"vm_id": 105}'
+  -d '{"lxc_id": 105}'
 ```
 
-### Get VM Status
+### Get LXC Status
 
 ```
-GET /resource/vm/status?vm_id=<id>
+GET /resource/lxc/status?lxc_id=<id>
 ```
 
 ```bash
 curl -H "X-API-Key: your-key" \
-  "http://localhost:5000/resource/vm/status?vm_id=104"
+  "http://localhost:5000/resource/lxc/status?lxc_id=104"
 ```
 
-### Get VM Configuration
+### Get LXC Configuration
 
 ```
-GET /resource/vm/config?vm_id=<id>
+GET /resource/lxc/config?lxc_id=<id>
 ```
 
 Returns min/max resource limits for a container.
 
 ```bash
 curl -H "X-API-Key: your-key" \
-  "http://localhost:5000/resource/vm/config?vm_id=104"
+  "http://localhost:5000/resource/lxc/config?lxc_id=104"
 ```
 
 ### Get Node Status

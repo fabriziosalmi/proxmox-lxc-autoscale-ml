@@ -144,13 +144,13 @@ def apply_scaling(lxc_id, new_cores, new_ram, config):
         return False
 
     if new_cores is not None:
-        cpu_data = {"vm_id": lxc_id, "cores": new_cores}
+        cpu_data = {"lxc_id": lxc_id, "cores": new_cores}
         cpu_url = f"{base_url}{cores_endpoint}"
         if not perform_request(cpu_url, cpu_data, "CPU"):
             logging.error(f"Scaling operation aborted for LXC ID {lxc_id} due to CPU scaling failure.")
 
     if new_ram is not None:
-        ram_data = {"vm_id": lxc_id, "memory": new_ram}
+        ram_data = {"lxc_id": lxc_id, "memory": new_ram}
         ram_url = f"{base_url}{ram_endpoint}"
         if not perform_request(ram_url, ram_data, "RAM"):
             logging.error(f"Scaling operation aborted for LXC ID {lxc_id} due to RAM scaling failure.")
