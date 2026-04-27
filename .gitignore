@@ -1,6 +1,30 @@
-QUICKWINS_80_20.md
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
 
-# VitePress build output
-docs/.vitepress/dist
-docs/.vitepress/cache
-docs/node_modules
+# IDEs and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs and config
+*.log
+.env
+config.local.yaml
+
+# Documentation and planning
+QUICKWINS_80_20.md
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
