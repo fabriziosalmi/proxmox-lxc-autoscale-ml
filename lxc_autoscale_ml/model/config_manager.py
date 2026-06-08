@@ -13,6 +13,9 @@ def load_config(config_path, default_config=None):
     try:
         with open(config_path, 'r') as file:
             config = yaml.safe_load(file)
+            if config is None:
+                logging.error(f"Configuration file is empty: {config_path}")
+                raise ConfigError("Configuration file is empty")
             logging.info(f"Configuration loaded from {config_path}")
     except yaml.YAMLError as e:
         logging.error(f"Error parsing YAML file: {e}")
