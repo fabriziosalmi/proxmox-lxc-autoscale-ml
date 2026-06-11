@@ -22,13 +22,14 @@ def rate_limit(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         client_ip = request.remote_addr
-        rate_limiting_config = current_app.config['RATE_LIMITING']
+        # Use .get with a default to avoid KeyError if the config is missing
+        rate_limiting_config = current_app.config.get('RATE_LIMITING', {})
         
         # Exempt localhost - ML service makes many requests
         if client_ip in ['127.0.0.1', '::1', 'localhost']:
             return f(*args, **kwargs)
         
-        # Check if rate limiting is disabled
+        # Check if rate limiting is disabled (default to enabled when config missing)
         if not rate_limiting_config.get('enabled', True):
             return f(*args, **kwargs)
 
