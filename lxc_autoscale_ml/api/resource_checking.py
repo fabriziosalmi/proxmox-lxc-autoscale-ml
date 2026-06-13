@@ -10,7 +10,7 @@ def check_vm_status(vm_id):
 
 def check_node_status(node_name):
     try:
-        result = subprocess.run(f"pvesh get /nodes/{node_name}/status", shell=True, capture_output=True, text=True)
+        result = subprocess.run(["pvesh", "get", f"/nodes/{node_name}/status"], capture_output=True, text=True)
         return create_response(data=result.stdout.strip(), message=f"Resource status retrieved for node '{node_name}'")
     except Exception as e:
         return handle_error(e)
