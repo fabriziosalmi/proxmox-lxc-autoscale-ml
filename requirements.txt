@@ -1,6 +1,6 @@
 Flask==3.0.0
 requests==2.33.0
-aiohttp==3.13.3  # For async API calls
+aiohttp==3.14.1  # For async API calls
 scikit-learn==1.5.0
 pandas==2.1.4
 numpy==1.26.2
