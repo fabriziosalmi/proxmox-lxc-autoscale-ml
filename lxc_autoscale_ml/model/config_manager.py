@@ -2,8 +2,10 @@ import yaml
 import logging
 import os
 
+
 class ConfigError(Exception):
     pass
+
 
 def load_config(config_path, default_config=None):
     if not os.path.exists(config_path):
@@ -67,13 +69,15 @@ def validate_scaling_config(config):
     if scaling.get('min_ram_mb', 0) > scaling.get('max_ram_mb', float('inf')):
         raise ConfigError("min_ram_mb cannot be greater than max_ram_mb")
     
-    # Validate thresholds are percentages (0-100)
+    # Validate thresholds are percentages (0-100) and numeric
     threshold_keys = ['cpu_scale_up_threshold', 'cpu_scale_down_threshold',
                      'ram_scale_up_threshold', 'ram_scale_down_threshold']
     
     for key in threshold_keys:
         if key in scaling:
             value = scaling[key]
+            if not isinstance(value, (int, float)):
+                raise ConfigError(f"{key} must be numeric, got {type(value).__name__}")
             if not (0 <= value <= 100):
                 raise ConfigError(f"{key} must be between 0 and 100, got {value}")
     
