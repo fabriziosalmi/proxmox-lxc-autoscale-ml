@@ -56,6 +56,15 @@ def require_api_key(f):
                 "message": "API authentication misconfigured"
             }), 500
         
+        # Filter out invalid (non-string or empty) keys to prevent TypeError in compare_digest
+        valid_keys = [k for k in valid_keys if isinstance(k, str) and len(k) > 0]
+        if not valid_keys:
+            current_app.logger.warning("API authentication enabled but no valid keys configured")
+            return jsonify({
+                "status": "error",
+                "message": "API authentication misconfigured"
+            }), 500
+        
         # Simple constant-time comparison
         key_valid = any(hmac.compare_digest(api_key, valid_key) for valid_key in valid_keys)
         
