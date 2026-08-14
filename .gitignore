@@ -28,3 +28,5 @@ QUICKWINS_80_20.md
 docs/node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
+# Workspace settings
+.claude/
