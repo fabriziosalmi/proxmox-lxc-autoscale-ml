@@ -40,7 +40,7 @@ curl http://localhost:5000/health/check
 
    ```bash
    curl -H "X-API-Key: YOUR_KEY" \
-     "http://localhost:5000/resource/vm/config?vm_id=104"
+     "http://localhost:5000/resource/lxc/config?lxc_id=104"
    ```
 
    If the API returns an error, restart the service:

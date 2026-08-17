@@ -20,10 +20,10 @@ def verify_api_key(provided_key, stored_hash):
 def require_api_key(f):
     """
     Decorator to require API key authentication.
-    
+
     Expects API key in X-API-Key header or api_key query parameter.
     Configure API keys in lxc_autoscale_api.yaml under 'api_keys' section.
-    
+
     Example config:
         authentication:
             enabled: true
@@ -33,20 +33,20 @@ def require_api_key(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         auth_config = current_app.config.get('AUTHENTICATION', {})
-        
+
         # Check if authentication is enabled
         if not auth_config.get('enabled', False):
             return f(*args, **kwargs)
-        
+
         # Get API key from header or query param
         api_key = request.headers.get('X-API-Key') or request.args.get('api_key')
-        
+
         if not api_key:
             return jsonify({
                 "status": "error",
                 "message": "Missing API key. Provide via X-API-Key header or api_key parameter."
             }), 401
-        
+
         # Verify API key
         valid_keys = auth_config.get('api_keys', [])
         if not valid_keys:
@@ -55,19 +55,19 @@ def require_api_key(f):
                 "status": "error",
                 "message": "API authentication misconfigured"
             }), 500
-        
+
         # Simple constant-time comparison
         key_valid = any(hmac.compare_digest(api_key, valid_key) for valid_key in valid_keys)
-        
+
         if not key_valid:
             current_app.logger.warning(f"Invalid API key attempt from {request.remote_addr}")
             return jsonify({
                 "status": "error",
                 "message": "Invalid API key"
             }), 403
-        
+
         return f(*args, **kwargs)
-    
+
     return decorated_function
 
 def get_client_identifier():

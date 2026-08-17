@@ -22,7 +22,7 @@ log_file: "/var/log/lxc_autoscale_ml.log"  # Path to the log file
 log_level: "DEBUG"  # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
 # Lock File Configuration
-lock_file: "/tmp/lxc_autoscale_ml.lock"  # Path to the lock file to prevent multiple instances
+lock_file: "/run/lxc_autoscale_ml.lock"  # Path to the lock file to prevent multiple instances
 
 # Data File Configuration
 data_file: "/var/log/lxc_metrics.json"  # Path to the metrics file containing container data produced by LXC AutoScale API
@@ -63,6 +63,8 @@ api:
   api_url: "http://127.0.0.1:5000"  # Base URL for the API used for scaling actions
   cores_endpoint: "/scale/cores"  # Endpoint for scaling CPU cores
   ram_endpoint: "/scale/ram"  # Endpoint for scaling RAM
+  timeout_seconds: 5  # Per-request timeout when talking to the API
+  max_concurrent: 10  # Maximum parallel config fetches
 
 # Retry Logic for API Calls
 retry_logic:

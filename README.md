@@ -140,22 +140,30 @@ The **API** provides RESTful endpoints for managing autoscaling services with en
 
 | Endpoint                   | Methods | Description                                             | Example                                                                                   |
 |----------------------------|---------|---------------------------------------------------------|-------------------------------------------------------------------------------------------|
-| `/scale/cores`             | POST    | Set the exact number of CPU cores for an LXC container.  | `curl -X POST http://proxmox:5000/scale/cores -H "Content-Type: application/json" -d '{"vm_id": 104, "cores": 4}'` |
-| `/scale/ram`               | POST    | Set the exact amount of RAM for an LXC container.        | `curl -X POST http://proxmox:5000/scale/ram -H "Content-Type: application/json" -d '{"vm_id": 104, "memory": 4096}'` |
-| `/scale/storage/increase`  | POST    | Increase the storage size of an LXC container's root filesystem. | `curl -X POST http://proxmox:5000/scale/storage/increase -H "Content-Type: application/json" -d '{"vm_id": 104, "disk_size": 2}'` |
-| `/snapshot/create`         | POST    | Create a snapshot for an LXC container.                  | `curl -X POST http://proxmox:5000/snapshot/create -H "Content-Type: application/json" -d '{"vm_id": 104, "snapshot_name": "my_snapshot"}'` |
-| `/snapshot/list`           | GET     | List all snapshots for an LXC container.                 | `curl -X GET "http://proxmox:5000/snapshot/list?vm_id=104"`                               |
-| `/snapshot/rollback`       | POST    | Rollback to a specific snapshot.                        | `curl -X POST http://proxmox:5000/snapshot/rollback -H "Content-Type: application/json" -d '{"vm_id": 104, "snapshot_name": "my_snapshot"}'` |
-| `/clone/create`            | POST    | Clone an LXC container.                                  | `curl -X POST http://proxmox:5000/clone/create -H "Content-Type: application/json" -d '{"vm_id": 104, "new_vm_id": 105, "new_vm_name": "cloned_container"}'` |
-| `/clone/delete`            | DELETE  | Delete a cloned LXC container.                           | `curl -X DELETE http://proxmox:5000/clone/delete -H "Content-Type: application/json" -d '{"vm_id": 105}'` |
-| `/resource/vm/status`      | GET     | Check the resource allocation and usage for an LXC container. | `curl -X GET "http://proxmox:5000/resource/vm/status?vm_id=104"`                        |
-| `/resource/vm/config`      | GET     | Get min/max resource limits for an LXC container. | `curl -X GET "http://proxmox:5000/resource/vm/config?vm_id=104"`                        |
+| `/scale/cores`             | POST    | Set the exact number of CPU cores for an LXC container.  | `curl -X POST http://proxmox:5000/scale/cores -H "Content-Type: application/json" -d '{"lxc_id": 104, "cores": 4}'` |
+| `/scale/ram`               | POST    | Set the exact amount of RAM for an LXC container.        | `curl -X POST http://proxmox:5000/scale/ram -H "Content-Type: application/json" -d '{"lxc_id": 104, "memory": 4096}'` |
+| `/scale/storage/increase`  | POST    | Increase the storage size of an LXC container's root filesystem. | `curl -X POST http://proxmox:5000/scale/storage/increase -H "Content-Type: application/json" -d '{"lxc_id": 104, "disk_size": 2}'` |
+| `/snapshot/create`         | POST    | Create a snapshot for an LXC container.                  | `curl -X POST http://proxmox:5000/snapshot/create -H "Content-Type: application/json" -d '{"lxc_id": 104, "snapshot_name": "my_snapshot"}'` |
+| `/snapshot/list`           | GET     | List all snapshots for an LXC container.                 | `curl -X GET "http://proxmox:5000/snapshot/list?lxc_id=104"`                               |
+| `/snapshot/rollback`       | POST    | Rollback to a specific snapshot.                        | `curl -X POST http://proxmox:5000/snapshot/rollback -H "Content-Type: application/json" -d '{"lxc_id": 104, "snapshot_name": "my_snapshot"}'` |
+| `/clone/create`            | POST    | Clone an LXC container.                                  | `curl -X POST http://proxmox:5000/clone/create -H "Content-Type: application/json" -d '{"lxc_id": 104, "new_lxc_id": 105, "new_lxc_name": "cloned_container"}'` |
+| `/clone/delete`            | DELETE  | Delete a cloned LXC container.                           | `curl -X DELETE http://proxmox:5000/clone/delete -H "Content-Type: application/json" -d '{"lxc_id": 105}'` |
+| `/resource/lxc/status`      | GET     | Check the resource allocation and usage for an LXC container. | `curl -X GET "http://proxmox:5000/resource/lxc/status?lxc_id=104"`                        |
+| `/resource/lxc/config`      | GET     | Get the current CPU and RAM allocation of an LXC container. | `curl -X GET "http://proxmox:5000/resource/lxc/config?lxc_id=104"`                        |
 | `/resource/node/status`    | GET     | Check the resource usage of a specific node.             | `curl -X GET "http://proxmox:5000/resource/node/status?node_name=proxmox"`                |
+| `/resource/cluster/status` | GET     | Check the status of the Proxmox cluster.                 | `curl -X GET http://proxmox:5000/resource/cluster/status`                                 |
 | `/health/check`            | GET     | Perform a health check on the API server.                | `curl -X GET http://proxmox:5000/health/check`                                            |
 | `/metrics`                 | GET     | Export Prometheus metrics for monitoring.                | `curl -X GET http://proxmox:5000/metrics`                                                 |
 | `/routes`                  | GET     | List all available routes.                               | `curl -X GET http://proxmox:5000/routes`                                                  |
 
-> **Security Note**: Use `X-API-Key` header for authenticated requests. See [API Documentation](docs/lxc_autoscale_api/README.md) for details.
+> **Naming**: container IDs are `lxc_id` and the resource paths are
+> `/resource/lxc/*`. The older `vm_id` and `/resource/vm/*` spellings are
+> deprecated but still accepted, so existing scripts keep working.
+> Every endpoint takes its parameters from a JSON body or the query string.
+
+> **Security Note**: Use the `X-API-Key` header for authenticated requests, and
+> see [Configuration](docs/reference/configuration.md) for binding the API to
+> `127.0.0.1` — it runs as root and executes `pct` commands.
 
 ### 2. Monitor Component
 
@@ -251,7 +259,7 @@ npm run dev
 | [Configuration](./docs/reference/configuration.md) | All configuration options |
 | [API Reference](./docs/reference/api-endpoints.md) | Complete API documentation |
 | [Troubleshooting](./docs/guide/troubleshooting.md) | Common issues and solutions |
-| [Changelog](./docs/changelog.md) | Version history |
+| [Changelog](./CHANGELOG.md) | Version history |
 
 ### Component Documentation
 

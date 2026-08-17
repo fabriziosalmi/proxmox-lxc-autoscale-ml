@@ -8,7 +8,9 @@ User=root
 Group=root
 Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin"
 WorkingDirectory=/usr/local/bin/lxc_autoscale_api/
-ExecStart=/usr/bin/python3 /usr/local/bin/lxc_autoscale_api/lxc_autoscale_api.py
+ExecStart=/usr/bin/gunicorn --config /usr/local/bin/lxc_autoscale_api/gunicorn_config.py
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
 
 # Restart on failure
 Restart=on-failure

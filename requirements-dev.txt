@@ -1,0 +1,7 @@
+# Tooling for linting and running the test suite. Every Proxmox call is stubbed,
+# so the suite runs anywhere, but the runtime dependencies are needed because
+# the tests exercise the data pipeline and the metrics collector too.
+-r requirements.txt
+
+pytest==8.4.2
+ruff==0.14.4

@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 
+import logging
 import sys
 import time
-import logging
-import pandas as pd
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -16,9 +15,12 @@ from lock_manager import create_lock_file, remove_lock_file
 from config_manager import load_config
 from data_manager import load_data, preprocess_data
 from model import train_anomaly_models, predict_anomalies
-from scaling import determine_scaling_action, apply_scaling
+from scaling_decisions import determine_scaling_action, apply_scaling
 from signal_handler import setup_signal_handlers
 from async_api_client import fetch_container_configs_sync
+
+CONFIG_PATH = "/etc/lxc_autoscale_ml/lxc_autoscale_ml.yaml"
+
 
 # Circuit breaker state for API calls
 class CircuitBreaker:
@@ -28,20 +30,20 @@ class CircuitBreaker:
         self.timeout = timeout  # seconds
         self.failures = defaultdict(int)
         self.opened_at = defaultdict(lambda: None)
-    
+
     def is_open(self, key):
         """Check if circuit is open (blocking requests)."""
         if self.opened_at[key] is None:
             return False
-        
+
         # Check if timeout has passed
         if datetime.now() - self.opened_at[key] > timedelta(seconds=self.timeout):
             logging.info(f"Circuit breaker for {key} timeout expired, attempting reset")
             self.reset(key)
             return False
-        
+
         return True
-    
+
     def record_failure(self, key):
         """Record a failure and open circuit if threshold reached."""
         self.failures[key] += 1
@@ -51,114 +53,237 @@ class CircuitBreaker:
                 f"Circuit breaker opened for {key} after {self.failures[key]} failures. "
                 f"Will retry in {self.timeout}s"
             )
-    
+
     def record_success(self, key):
         """Record a success and reset circuit."""
         if self.failures[key] > 0:
             logging.info(f"Circuit breaker for {key} reset after successful request")
         self.reset(key)
-    
+
     def reset(self, key):
         """Reset circuit breaker state."""
         self.failures[key] = 0
         self.opened_at[key] = None
 
-# Global circuit breaker instance
-api_circuit_breaker = CircuitBreaker(failure_threshold=3, timeout=300)
+
+def build_circuit_breaker(config):
+    """Build the circuit breaker from the `circuit_breaker` config section.
+
+    Previously hard-coded, so the documented settings had no effect.
+    """
+    breaker_config = config.get("circuit_breaker", {})
+    if not breaker_config.get("enabled", True):
+        logging.info("Circuit breaker disabled by configuration")
+        return None
+    return CircuitBreaker(
+        failure_threshold=breaker_config.get("failure_threshold", 3),
+        timeout=breaker_config.get("timeout_seconds", 300),
+    )
+
+
+def ignored_container_ids(config):
+    """Container IDs excluded from autoscaling, as strings.
+
+    The `ignore_lxc` list is compared as strings because container ids arrive
+    from JSON object keys; a config written as `[101, 102]` must still match.
+    """
+    return {str(container_id) for container_id in config.get("ignore_lxc") or []}
+
+
+def run_cycle(config, circuit_breaker=None):
+    """
+    Run one full collection -> prediction -> scaling pass.
+
+    Returns:
+        bool: True if the cycle completed, False if it was skipped because the
+        input data or the model was not usable. A skipped cycle is not fatal;
+        the caller waits for the next interval and tries again.
+    """
+    df = load_data(config.get("data_file", "/var/log/lxc_metrics.json"))
+    if df is None:
+        logging.error("No usable metrics data; skipping this cycle.")
+        return False
+
+    df = preprocess_data(df, config)
+    if df is None or df.empty:
+        logging.error("Preprocessing produced no usable data; skipping this cycle.")
+        return False
+
+    model, features_to_use = train_anomaly_models(df, config)
+    if model is None:
+        logging.error("Model training failed; skipping this cycle.")
+        return False
+
+    logging.info("Processing containers for scaling decisions...")
+
+    # Container ids are strings throughout: data_manager takes them from JSON
+    # object keys. Comparing the column against int(container_id) matched no
+    # rows at all, so the very first container raised IndexError and killed
+    # the whole run.
+    container_ids = [str(cid) for cid in df["container_id"].unique()]
+
+    ignored = ignored_container_ids(config)
+    if ignored:
+        skipped = [cid for cid in container_ids if cid in ignored]
+        container_ids = [cid for cid in container_ids if cid not in ignored]
+        if skipped:
+            logging.info(f"Ignoring containers listed in ignore_lxc: {', '.join(skipped)}")
+
+    if not container_ids:
+        logging.info("No containers to evaluate.")
+        return True
+
+    scaling_config = config.get("scaling", {})
+    dry_run = bool(scaling_config.get("dry_run", False))
+    if dry_run:
+        logging.info("dry_run is enabled: scaling decisions will be logged, not applied.")
+    min_confidence = scaling_config.get("min_confidence", 0)
+
+    logging.info(f"Batch fetching configs for {len(container_ids)} containers...")
+    batch_start = time.monotonic()
+
+    api_config = config["api"]
+    all_configs = fetch_container_configs_sync(
+        container_ids,
+        api_config["api_url"],
+        circuit_breaker=circuit_breaker,
+        # `timeout` is accepted as well for configs written against the
+        # older documentation.
+        timeout=api_config.get("timeout_seconds", api_config.get("timeout", 5)),
+        max_concurrent=api_config.get("max_concurrent", 10),
+    )
+
+    batch_duration = time.monotonic() - batch_start
+    successful_fetches = sum(1 for c in all_configs.values() if c is not None)
+    rate = successful_fetches / batch_duration if batch_duration > 0 else float("inf")
+    logging.info(
+        f"Batch fetch completed in {batch_duration:.2f}s: "
+        f"{successful_fetches}/{len(container_ids)} successful "
+        f"({rate:.1f} containers/sec)"
+    )
+
+    for container_id in container_ids:
+        try:
+            evaluate_container(
+                container_id=container_id,
+                df=df,
+                model=model,
+                features_to_use=features_to_use,
+                container_config=all_configs.get(container_id),
+                config=config,
+                dry_run=dry_run,
+                min_confidence=min_confidence,
+            )
+        except Exception:
+            # One bad container must not abandon the rest of the fleet.
+            logging.exception(f"Failed to evaluate container {container_id}; continuing.")
+
+    return True
+
+
+def evaluate_container(container_id, df, model, features_to_use, container_config,
+                       config, dry_run, min_confidence):
+    """Decide and, unless dry_run is set, apply scaling for one container."""
+    scaling_config = config["scaling"]
+    container_data = df[df["container_id"] == container_id]
+    if container_data.empty:
+        logging.warning(f"No metrics rows for container {container_id}; skipping.")
+        return
+
+    latest_metrics = container_data.iloc[-1].copy()
+
+    if container_config:
+        latest_metrics["current_cores"] = container_config.get(
+            "cores", scaling_config["min_cpu_cores"])
+        latest_metrics["current_ram_mb"] = container_config.get(
+            "memory_mb", scaling_config["min_ram_mb"])
+        logging.debug(
+            f"Container {container_id} current config: "
+            f"{container_config.get('cores')} cores, "
+            f"{container_config.get('memory_mb')} MB RAM"
+        )
+    else:
+        latest_metrics["current_cores"] = scaling_config["min_cpu_cores"]
+        latest_metrics["current_ram_mb"] = scaling_config["min_ram_mb"]
+        logging.warning(f"Using defaults for container {container_id} (config fetch failed)")
+
+    scaling_decision, confidence = predict_anomalies(
+        model, latest_metrics, features_to_use, config)
+
+    if scaling_decision is None:
+        logging.warning(f"Skipping scaling for container {container_id} due to lack of prediction.")
+        return
+
+    cpu_action, ram_action, new_cores, new_ram = determine_scaling_action(
+        latest_metrics, scaling_decision, confidence, config)
+
+    logging.debug(
+        f"Scaling decision for container {container_id}: "
+        f"CPU - {cpu_action}, RAM - {ram_action} | Confidence: {confidence:.2f}%"
+    )
+
+    if cpu_action == "No Scaling" and ram_action == "No Scaling":
+        logging.info(f"No scaling needed for container {container_id}. | Confidence: {confidence:.2f}%")
+        return
+
+    if confidence < min_confidence:
+        logging.info(
+            f"Skipping scaling for container {container_id}: confidence "
+            f"{confidence:.2f}% is below min_confidence {min_confidence}%."
+        )
+        return
+
+    if dry_run:
+        logging.info(
+            f"[dry_run] Would scale container {container_id}: "
+            f"CPU - {cpu_action} (-> {new_cores}), RAM - {ram_action} (-> {new_ram}) "
+            f"| Confidence: {confidence:.2f}%"
+        )
+        return
+
+    logging.info(
+        f"Applying scaling actions for container {container_id}: "
+        f"CPU - {cpu_action}, RAM - {ram_action} | Confidence: {confidence:.2f}%"
+    )
+    apply_scaling(container_id, new_cores, new_ram, config)
 
 
 def main():
-    config = load_config("/etc/lxc_autoscale_ml/lxc_autoscale_ml.yaml")
-    setup_logging(config.get("log_file", "/var/log/lxc_autoscale_ml.log"))
+    config = load_config(CONFIG_PATH)
+    setup_logging(
+        config.get("log_file", "/var/log/lxc_autoscale_ml.log"),
+        # log_level was in the shipped config but never passed through.
+        config.get("log_level", "INFO"),
+    )
 
     logging.info("Starting the LXC auto-scaling script...")
 
-    create_lock_file(config.get("lock_file", "/tmp/lxc_autoscale_ml.lock"))
+    lock_file = config.get("lock_file", "/run/lxc_autoscale_ml.lock")
+    create_lock_file(lock_file)
+
+    # Ensure the lock is released on SIGINT/SIGTERM too, not only on a clean
+    # exit from the loop below.
+    setup_signal_handlers(cleanup_function=lambda: remove_lock_file(lock_file))
+
+    circuit_breaker = build_circuit_breaker(config)
+    interval = config.get("interval_seconds", 60)
 
     try:
         while True:
-            # Load and preprocess data
-            df = load_data(config.get("data_file", "/var/log/lxc_metrics.json"))
-            if df is None:
-                logging.error("Exiting due to data loading error.")
-                return
+            try:
+                run_cycle(config, circuit_breaker)
+            except Exception:
+                # A failed cycle is not a reason to stop the service. Exiting
+                # here returned 0, so systemd's Restart=on-failure never fired
+                # and autoscaling silently stopped until someone noticed.
+                logging.exception("Scaling cycle failed; retrying at the next interval.")
 
-            df = preprocess_data(df, config)
-
-            # Train anomaly detection models
-            model, features_to_use = train_anomaly_models(df, config)
-            if model is None:
-                logging.error("Model training failed. Exiting.")
-                return
-
-            logging.info("Processing containers for scaling decisions...")
-
-            # Get all unique container IDs
-            container_ids = [str(cid) for cid in df["container_id"].unique()]
-            
-            # Batch fetch all container configs in parallel (10x faster than sequential!)
-            logging.info(f"Batch fetching configs for {len(container_ids)} containers...")
-            batch_start = time.time()
-            
-            all_configs = fetch_container_configs_sync(
-                container_ids,
-                config["api"]["api_url"],
-                circuit_breaker=api_circuit_breaker,
-                timeout=5,
-                max_concurrent=10
-            )
-            
-            batch_duration = time.time() - batch_start
-            successful_fetches = sum(1 for c in all_configs.values() if c is not None)
-            logging.info(
-                f"Batch fetch completed in {batch_duration:.2f}s: "
-                f"{successful_fetches}/{len(container_ids)} successful "
-                f"({successful_fetches/batch_duration:.1f} containers/sec)"
-            )
-
-            # Iterate over each container and make scaling decisions
-            for container_id in container_ids:
-                container_data = df[df["container_id"] == int(container_id)]
-                latest_metrics = container_data.iloc[-1].copy()
-
-                # Use batch-fetched config or defaults
-                config_data = all_configs.get(container_id)
-                if config_data:
-                    latest_metrics["current_cores"] = config_data.get("cores", config["scaling"]["min_cpu_cores"])
-                    latest_metrics["current_ram_mb"] = config_data.get("memory_mb", config["scaling"]["min_ram_mb"])
-                    logging.debug(f"Container {container_id} current config: {config_data.get('cores')} cores, {config_data.get('memory_mb')} MB RAM")
-                else:
-                    latest_metrics["current_cores"] = config["scaling"]["min_cpu_cores"]
-                    latest_metrics["current_ram_mb"] = config["scaling"]["min_ram_mb"]
-                    logging.warning(f"Using defaults for container {container_id} (config fetch failed)")
-
-                logging.debug(f"Latest metrics for container {container_id}: {latest_metrics.to_dict()}")
-
-                scaling_decision, confidence = predict_anomalies(model, latest_metrics, features_to_use, config)
-
-                if scaling_decision is not None:
-                    cpu_action, ram_action, new_cores, new_ram = determine_scaling_action(latest_metrics, scaling_decision, confidence, config)
-                    logging.debug(f"Scaling decision for container {container_id}: CPU - {cpu_action}, RAM - {ram_action} | Confidence: {confidence:.2f}%")
-
-                    if cpu_action != "No Scaling" or ram_action != "No Scaling":
-                        logging.info(f"Applying scaling actions for container {container_id}: CPU - {cpu_action}, RAM - {ram_action} | Confidence: {confidence:.2f}%")
-                        apply_scaling(container_id, new_cores, new_ram, config)
-                    else:
-                        logging.info(f"No scaling needed for container {container_id}. | Confidence: {confidence:.2f}%")
-                else:
-                    logging.warning(f"Skipping scaling for container {container_id} due to lack of prediction.")
-
-            # Sleep until the next interval
-            logging.info(f"Sleeping for {config.get('interval_seconds', 60)} seconds before the next run.")
-            time.sleep(config.get("interval_seconds", 60))
-
-    except Exception as e:
-        logging.error(f"An error occurred: {e}")
+            logging.info(f"Sleeping for {interval} seconds before the next run.")
+            time.sleep(interval)
     finally:
-        remove_lock_file(config.get("lock_file", "/tmp/lxc_autoscale_ml.lock"))
+        remove_lock_file(lock_file)
         logging.info("Script execution completed.")
 
+
 if __name__ == "__main__":
-    # Setup signal handlers to ensure graceful shutdown
-    setup_signal_handlers()
     main()

@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# LXC AutoScale ML uninstaller.
+
+set -euo pipefail
 
 # Log file for uninstallation
 LOGFILE="lxc_autoscale_ml_uninstaller.log"
@@ -43,12 +47,39 @@ log() {
 
 log "INFO" "Starting LXC AutoScale ML uninstallation..." "$INFO"
 
+# Keep a copy of the configuration before removing it. The uninstaller deletes
+# /etc/lxc_autoscale_ml/*.yaml, which is where any local tuning lives; without
+# this, reinstalling means redoing all of it from memory.
+backup_configs() {
+    local timestamp
+    timestamp=$(date +"%Y%m%d%H%M%S")
+    local backup_dir="/root/lxc_autoscale_ml_config_backup_${timestamp}"
+    local found=0
+
+    for file in /etc/lxc_autoscale_ml/*.yaml; do
+        [[ -e "$file" ]] || continue
+        if [[ $found -eq 0 ]]; then
+            mkdir -p "$backup_dir"
+            found=1
+        fi
+        cp "$file" "$backup_dir/"
+    done
+
+    if [[ $found -eq 1 ]]; then
+        log "SUCCESS" "Configuration backed up to ${backup_dir}" "$CHECKMARK"
+    else
+        log "WARNING" " No configuration files found to back up." "$SKIP"
+    fi
+}
+
+backup_configs
+
 # Function to stop and disable a service
 uninstall_service() {
     local service_name="$1"
     log "INFO" "Stopping and disabling the ${service_name} service..." "$INFO"
 
-    if systemctl is-active --quiet "$service_name"; then
+    if systemctl is-active --quiet "$service_name" 2>/dev/null; then
         if systemctl stop "$service_name"; then
             log "SUCCESS" "Successfully stopped ${service_name}." "$CHECKMARK"
         else
@@ -58,7 +89,7 @@ uninstall_service() {
         log "WARNING" " ${service_name} is not running or does not exist." "$WARNING"
     fi
 
-    if systemctl is-enabled --quiet "$service_name"; then
+    if systemctl is-enabled --quiet "$service_name" 2>/dev/null; then
         if systemctl disable "$service_name"; then
             log "SUCCESS" "Successfully disabled ${service_name}." "$CHECKMARK"
         else
@@ -112,7 +143,7 @@ fi
 
 # Reload systemd to reflect changes
 log "INFO" "Reloading systemd daemon to reflect changes..." "$INFO"
-systemctl daemon-reload
+systemctl daemon-reload || true
 
 # Final message
 log "SUCCESS" "LXC AutoScale ML uninstallation complete!" "$CHECKMARK"
