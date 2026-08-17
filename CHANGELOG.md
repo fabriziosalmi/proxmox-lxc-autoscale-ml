@@ -229,7 +229,7 @@ Major release with critical bug fixes, performance improvements, and new enterpr
   - Configurable threshold (default: 5 failures) and timeout (default: 5 minutes)
   - Auto-recovery after timeout period
 
-- **Incremental Scaling** ([`scaling.py`](lxc_autoscale_ml/model/scaling.py))
+- **Incremental Scaling** ([`scaling.py`](lxc_autoscale_ml/model/scaling_decisions.py))
   - Scale gradually instead of jumping to extremes
   - CPU: ±1 core per cycle (configurable via `cpu_scale_step`)
   - RAM: ±512MB per cycle (configurable via `ram_scale_step_mb`)
@@ -254,10 +254,10 @@ Major release with critical bug fixes, performance improvements, and new enterpr
   - Maintains constant file size (~2MB)
 
 #### Documentation
-- **[BUGFIX_SCALING_ISSUE_6.md](BUGFIX_SCALING_ISSUE_6.md)** - Detailed explanation of critical scaling bug fixes
-- **[QUICKWINS_80_20.md](QUICKWINS_80_20.md)** - High-impact optimizations following 80/20 principle
-- **[FIXES_ISSUES_3_4.md](FIXES_ISSUES_3_4.md)** - Resolution of year-old rate limiting and config issues
-- **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)** - Comprehensive troubleshooting guide
+- **BUGFIX_SCALING_ISSUE_6.md** - Detailed explanation of critical scaling bug fixes
+- **QUICKWINS_80_20.md** - High-impact optimizations following 80/20 principle
+- **FIXES_ISSUES_3_4.md** - Resolution of year-old rate limiting and config issues
+- **docs/TROUBLESHOOTING.md** - Comprehensive troubleshooting guide
 - Updated README with all new features and security information
 - Complete API, Model, and Monitor documentation rewrites
 
@@ -277,13 +277,13 @@ Major release with critical bug fixes, performance improvements, and new enterpr
    - **Fix**: Check for `-1` specifically (anomaly)
    - **Result**: Correct anomaly detection
 
-2. **Always Jumping to Max/Min Resources** ([`scaling.py`](lxc_autoscale_ml/model/scaling.py))
+2. **Always Jumping to Max/Min Resources** ([`scaling.py`](lxc_autoscale_ml/model/scaling_decisions.py))
    - **Bug**: Scaled directly to `max_cpu_cores` or `min_cpu_cores`
    - **Impact**: 2 cores → 8 cores in one step, wasting resources
    - **Fix**: Incremental scaling with step sizes
    - **Result**: Gradual resource adjustment
 
-3. **RAM Threshold Comparison** ([`scaling.py`](lxc_autoscale_ml/model/scaling.py))
+3. **RAM Threshold Comparison** ([`scaling.py`](lxc_autoscale_ml/model/scaling_decisions.py))
    - **Bug**: Compared MB value to percentage threshold (e.g., 4096 MB > 80%)
    - **Impact**: RAM scaling never triggered or always triggered
    - **Fix**: Calculate percentage: `(usage_mb / current_ram_mb) * 100`
@@ -486,7 +486,7 @@ If you were hitting rate limits:
 
 - **Documentation**: [docs/](docs/)
 - **Issues**: [GitHub Issues](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/issues)
-- **Troubleshooting**: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+- **Troubleshooting**: docs/TROUBLESHOOTING.md
 
 ---
 
