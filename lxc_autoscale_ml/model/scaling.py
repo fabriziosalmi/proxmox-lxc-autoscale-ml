@@ -1,18 +1,8 @@
-import requests
 import logging
 import time
-import sys
-import pandas as pd
 
-# Ensure all modules in the lxc_autoscale_ml directory are accessible
-sys.path.append('/usr/local/bin/lxc_autoscale_ml')
+import requests
 
-# Import custom modules
-from logger import setup_logging
-from lock_manager import create_lock_file, remove_lock_file
-from config_manager import load_config
-from model import train_anomaly_models, predict_anomalies
-from signal_handler import setup_signal_handlers
 
 def determine_scaling_action(latest_metrics, scaling_decision, confidence, config):
     """
@@ -122,16 +112,22 @@ def apply_scaling(lxc_id, new_cores, new_ram, config):
     cores_endpoint = config["api"].get("cores_endpoint", "/scale/cores")
     ram_endpoint = config["api"].get("ram_endpoint", "/scale/ram")
 
+    request_timeout = config["api"].get("timeout_seconds", 10)
+
     def perform_request(url, data, resource_type):
         resource_key = "cores" if resource_type == "CPU" else "memory"
         for attempt in range(max_retries):
             try:
-                response = requests.post(url, json=data)
+                response = requests.post(url, json=data, timeout=request_timeout)
                 response.raise_for_status()
                 logging.info(f"Successfully scaled {resource_type} for LXC ID {lxc_id} to {data[resource_key]} {resource_type} units.")
                 return True
             except requests.RequestException as e:
-                if response.status_code == 500:
+                # `e.response` is None for connection/timeout errors, where no
+                # response was ever received. Reading it off the local variable
+                # instead used to raise UnboundLocalError and mask the failure.
+                status_code = e.response.status_code if e.response is not None else None
+                if status_code == 500:
                     logging.error(f"Server error (500) encountered on attempt {attempt + 1} to scale {resource_type} for LXC ID {lxc_id}. Aborting further attempts.")
                     break  # Skip further retries for 500 errors
                 logging.error(f"Attempt {attempt + 1} failed to scale {resource_type} for LXC ID {lxc_id}: {e}")
@@ -143,14 +139,17 @@ def apply_scaling(lxc_id, new_cores, new_ram, config):
                     return False
         return False
 
+    # Both spellings are sent so a newer model keeps working against an API
+    # that has not been upgraded yet.
+    def payload(**fields):
+        return dict(lxc_id=lxc_id, vm_id=lxc_id, **fields)
+
     if new_cores is not None:
-        cpu_data = {"vm_id": lxc_id, "cores": new_cores}
         cpu_url = f"{base_url}{cores_endpoint}"
-        if not perform_request(cpu_url, cpu_data, "CPU"):
+        if not perform_request(cpu_url, payload(cores=new_cores), "CPU"):
             logging.error(f"Scaling operation aborted for LXC ID {lxc_id} due to CPU scaling failure.")
 
     if new_ram is not None:
-        ram_data = {"vm_id": lxc_id, "memory": new_ram}
         ram_url = f"{base_url}{ram_endpoint}"
-        if not perform_request(ram_url, ram_data, "RAM"):
+        if not perform_request(ram_url, payload(memory=new_ram), "RAM"):
             logging.error(f"Scaling operation aborted for LXC ID {lxc_id} due to RAM scaling failure.")

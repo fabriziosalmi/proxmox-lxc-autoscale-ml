@@ -3,7 +3,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 import logging
 import numpy as np
-import pandas as pd
 
 def train_anomaly_models(df, config):
     # Select only numeric features for training, excluding non-relevant columns

@@ -28,7 +28,7 @@ def load_config(config_path, default_config=None):
 
     if default_config:
         config = {**default_config, **config}
-        logging.debug(f"Configuration merged with default values.")
+        logging.debug("Configuration merged with default values.")
 
     required_keys = ['log_file', 'interval_seconds', 'api']
     for key in required_keys:
