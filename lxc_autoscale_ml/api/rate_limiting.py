@@ -37,42 +37,48 @@ def rate_limit(f):
         time_window = rate_limiting_config.get('time_window_seconds', 60)
         max_requests = rate_limiting_config.get('max_requests_per_minute', 60)
         
+        # Only the bookkeeping is serialised. The wrapped view runs outside the
+        # lock: scaling calls shell out to `pct` and can take seconds, and
+        # holding the lock across them would serialise the whole API.
         with _rate_limit_lock:
-            if client_ip not in rate_limit_data:
-                rate_limit_data[client_ip] = []
+            # Drop access times that fell out of the sliding window
+            access_times = [
+                t for t in rate_limit_data.get(client_ip, [])
+                if current_time - t < time_window
+            ]
 
-            access_times = rate_limit_data[client_ip]
-            
-            # Filter out access times that are older than the time window
-            access_times = [t for t in access_times if current_time - t < time_window]
-            rate_limit_data[client_ip] = access_times
-            
             if len(access_times) >= max_requests:
-                # Calculate retry-after time
+                rate_limit_data[client_ip] = access_times
                 oldest_request = min(access_times)
                 retry_after = int(time_window - (current_time - oldest_request)) + 1
-                
-                response = jsonify({
-                    "status": "error",
-                    "error": "Rate limit exceeded. Please try again later.",
-                    "retry_after_seconds": retry_after,
-                    "limit": max_requests,
-                    "window_seconds": time_window
-                })
-                response.headers['Retry-After'] = str(retry_after)
-                response.headers['X-RateLimit-Limit'] = str(max_requests)
-                response.headers['X-RateLimit-Remaining'] = '0'
-                response.headers['X-RateLimit-Reset'] = str(int(oldest_request + time_window))
-                return response, 429
+                limited = (retry_after, oldest_request)
+            else:
+                access_times.append(current_time)
+                rate_limit_data[client_ip] = access_times
+                limited = None
 
-            access_times.append(current_time)
-            
-            # Add rate limit headers to successful responses
-            response = f(*args, **kwargs)
-            if hasattr(response, 'headers'):
-                response.headers['X-RateLimit-Limit'] = str(max_requests)
-                response.headers['X-RateLimit-Remaining'] = str(max_requests - len(access_times))
-            
-            return response
-    
+            remaining = max(0, max_requests - len(access_times))
+
+        if limited is not None:
+            retry_after, oldest_request = limited
+            response = jsonify({
+                "status": "error",
+                "error": "Rate limit exceeded. Please try again later.",
+                "retry_after_seconds": retry_after,
+                "limit": max_requests,
+                "window_seconds": time_window
+            })
+            response.headers['Retry-After'] = str(retry_after)
+            response.headers['X-RateLimit-Limit'] = str(max_requests)
+            response.headers['X-RateLimit-Remaining'] = '0'
+            response.headers['X-RateLimit-Reset'] = str(int(oldest_request + time_window))
+            return response, 429
+
+        response = f(*args, **kwargs)
+        if hasattr(response, 'headers'):
+            response.headers['X-RateLimit-Limit'] = str(max_requests)
+            response.headers['X-RateLimit-Remaining'] = str(remaining)
+
+        return response
+
     return decorated_function
