@@ -66,24 +66,51 @@ def load_data(file_path):
     return df
 
 
+def _rolling_trend(series, window):
+    """Slope of the rolling mean, or 0 when there is not enough data.
+
+    np.polyfit raises on a single-sample group, which used to abort the whole
+    preprocessing step and leave the caller with a half-transformed frame.
+    """
+    smoothed = series.rolling(window=window, min_periods=1).mean()
+    if len(smoothed) < 2 or smoothed.nunique() < 2:
+        return 0.0
+    return np.polyfit(np.arange(len(smoothed)), smoothed, 1)[0]
+
+
+def _safe_ratio(numerator, denominator):
+    """Element-wise division that yields 0 instead of inf/NaN on a zero denominator."""
+    ratio = numerator.divide(denominator).replace([np.inf, -np.inf], np.nan)
+    return ratio.fillna(0.0)
+
+
 def preprocess_data(df, config):
     if df.empty:
         logging.error("DataFrame is empty. Skipping preprocessing.")
         return df
 
     try:
-        spike_threshold = config.get('spike_detection', {}).get('spike_threshold', 2)
-        rolling_window_size = config.get('rolling_window', 5)
+        spike_config = config.get('spike_detection', {})
+        spike_threshold = spike_config.get('spike_threshold', 2)
+        # rolling_window lives under spike_detection in the shipped config; the
+        # top-level lookup always missed it and silently used the default.
+        rolling_window_size = spike_config.get(
+            'rolling_window', config.get('rolling_window', 5))
 
-        # Derived metrics
-        df['cpu_per_process'] = df['cpu_usage_percent'] / df['process_count']
-        df['memory_per_process'] = df['memory_usage_mb'] / df['process_count']
-        df['cpu_memory_ratio'] = df['cpu_usage_percent'] / df['memory_usage_mb']  # New metric: CPU to Memory Ratio
+        # Derived metrics. A container reporting zero processes or zero memory
+        # would otherwise produce inf here, which StandardScaler turns into NaN
+        # and IsolationForest then refuses to fit on.
+        df['cpu_per_process'] = _safe_ratio(df['cpu_usage_percent'], df['process_count'])
+        df['memory_per_process'] = _safe_ratio(df['memory_usage_mb'], df['process_count'])
+        df['cpu_memory_ratio'] = _safe_ratio(df['cpu_usage_percent'], df['memory_usage_mb'])
 
         # Fix for time_diff calculation
         try:
             df['time_diff'] = df.groupby('container_id')['timestamp'].diff().dt.total_seconds()
-            df['time_diff'].fillna(0, inplace=True)
+            # Assigning the result rather than fillna(inplace=True) on a column:
+            # the latter is a chained assignment and stops working under
+            # pandas copy-on-write.
+            df['time_diff'] = df['time_diff'].fillna(0)
         except Exception as e:
             logging.error(f"Error calculating 'time_diff': {e}")
             df['time_diff'] = 0  # Default to 0 in case of errors
@@ -104,9 +131,9 @@ def preprocess_data(df, config):
 
         # Trend detection using the slope of the rolling window
         df['cpu_trend'] = df.groupby('container_id')['cpu_usage_percent'].transform(
-            lambda x: np.polyfit(np.arange(len(x)), x.rolling(window=rolling_window_size, min_periods=1).mean(), 1)[0])
+            lambda x: _rolling_trend(x, rolling_window_size))
         df['memory_trend'] = df.groupby('container_id')['memory_usage_mb'].transform(
-            lambda x: np.polyfit(np.arange(len(x)), x.rolling(window=rolling_window_size, min_periods=1).mean(), 1)[0])
+            lambda x: _rolling_trend(x, rolling_window_size))
 
         # Aggregated features
         df['max_cpu'] = df.groupby('container_id')['cpu_usage_percent'].transform(
@@ -128,8 +155,10 @@ def preprocess_data(df, config):
         df[features_to_scale] = scaler.fit_transform(df[features_to_scale])
 
         logging.info("Feature engineering, spike detection, and trend detection completed.")
-    except Exception as e:
-        logging.error(f"Error during data preprocessing: {e}")
-        return df
+    except Exception:
+        # Returning the half-transformed frame used to hand the model an
+        # inconsistent feature set; the caller skips the cycle instead.
+        logging.exception("Error during data preprocessing")
+        return None
 
     return df

@@ -8,12 +8,12 @@ import sys
 
 import pytest
 
-API_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "lxc_autoscale_ml",
-    "api",
-)
-sys.path.insert(0, API_DIR)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+API_DIR = os.path.join(ROOT, "lxc_autoscale_ml", "api")
+MODEL_DIR = os.path.join(ROOT, "lxc_autoscale_ml", "model")
+MONITOR_DIR = os.path.join(ROOT, "lxc_autoscale_ml", "monitor")
+for path in (API_DIR, MODEL_DIR, MONITOR_DIR):
+    sys.path.insert(0, path)
 
 
 TEST_CONFIG = {
