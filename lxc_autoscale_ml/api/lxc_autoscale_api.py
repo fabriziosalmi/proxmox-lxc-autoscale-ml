@@ -224,6 +224,7 @@ def create_clone_route():
         logging.info(f"Creating snapshot '{snapshot_name}' of container {lxc_id}")
         lxc_manager.create_snapshot(lxc_id, snapshot_name)
 
+        cleanup_error = None
         try:
             logging.info(f"Cloning container {lxc_id} to {new_lxc_id} ('{new_lxc_name}')")
             lxc_manager.clone_container(lxc_id, new_lxc_id, new_lxc_name, snapshot_name)
@@ -231,9 +232,26 @@ def create_clone_route():
             logging.info(f"Starting clone {new_lxc_id}")
             lxc_manager.start_container(new_lxc_id)
         finally:
-            # Always drop the temporary snapshot, even when cloning failed.
+            # Always drop the temporary snapshot, even when cloning failed. A
+            # failure here is logged rather than raised, so it cannot mask the
+            # error that actually broke the clone.
             logging.info(f"Deleting snapshot '{snapshot_name}' of container {lxc_id}")
-            lxc_manager.delete_snapshot(lxc_id, snapshot_name)
+            try:
+                lxc_manager.delete_snapshot(lxc_id, snapshot_name)
+            except Exception as e:  # noqa: BLE001 - reported, never swallowed silently
+                cleanup_error = e
+                logging.error(
+                    f"Failed to delete temporary snapshot '{snapshot_name}' of "
+                    f"container {lxc_id}: {e}"
+                )
+
+        if cleanup_error is not None:
+            return create_response(
+                data=f"Container {new_lxc_id} cloned from {lxc_id} and started successfully, "
+                     f"but the temporary snapshot {snapshot_name} could not be removed.",
+                message=f"Clone succeeded; snapshot cleanup failed: {cleanup_error}",
+                status_code=200
+            )
 
         return create_response(
             data=f"Container {new_lxc_id} cloned from {lxc_id} and started successfully. Snapshot {snapshot_name} removed.",

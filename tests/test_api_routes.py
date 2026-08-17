@@ -183,6 +183,48 @@ class TestCloneEndpoints:
         assert response.status_code == 500
         assert "pct delsnapshot 104 snapshot-105" in pct
 
+    def test_failed_cleanup_does_not_mask_the_clone_error(self, client, monkeypatch, pct):
+        import lxc_management
+
+        original = lxc_management.LXCManager._run_command
+
+        def fail_clone_and_cleanup(self, command):
+            if command.startswith("pct clone"):
+                raise RuntimeError("storage full")
+            if command.startswith("pct delsnapshot"):
+                raise RuntimeError("snapshot is locked")
+            return original(self, command)
+
+        monkeypatch.setattr(lxc_management.LXCManager, "_run_command", fail_clone_and_cleanup)
+        response = client.post(
+            "/clone/create",
+            json={"lxc_id": 104, "new_lxc_id": 105, "new_lxc_name": "clone1"},
+        )
+        assert response.status_code == 500
+        # show_stack_traces is on in the test config, so the reported cause must
+        # be the clone failure, not the cleanup failure that happened after it.
+        assert "storage full" in response.get_json()["message"]
+
+    def test_cleanup_failure_after_a_successful_clone_is_reported(self, client, monkeypatch, pct):
+        import lxc_management
+
+        original = lxc_management.LXCManager._run_command
+
+        def fail_cleanup(self, command):
+            if command.startswith("pct delsnapshot"):
+                raise RuntimeError("snapshot is locked")
+            return original(self, command)
+
+        monkeypatch.setattr(lxc_management.LXCManager, "_run_command", fail_cleanup)
+        response = client.post(
+            "/clone/create",
+            json={"lxc_id": 104, "new_lxc_id": 105, "new_lxc_name": "clone1"},
+        )
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert "snapshot is locked" in payload["message"]
+        assert "could not be removed" in payload["data"]
+
     def test_delete_clone(self, client, pct):
         """Previously raised NameError on an undefined variable."""
         response = client.delete("/clone/delete", json={"lxc_id": 105})
