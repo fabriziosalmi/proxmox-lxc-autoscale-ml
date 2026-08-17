@@ -40,7 +40,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install test dependencies
-        run: pip install Flask==3.1.3 PyYAML==6.0.1 requests pytest==8.4.2
+        # The tests stub out every Proxmox call, so pandas/scikit-learn are not
+        # needed. prometheus-client is included so the metrics path is covered.
+        run: pip install Flask==3.1.3 PyYAML==6.0.1 requests prometheus-client==0.19.0 pytest==8.4.2
       - name: Run tests
         run: pytest
 

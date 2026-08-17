@@ -206,6 +206,28 @@ class TestOperationalEndpoints:
         # 200 with prometheus_client installed, 501 without; never 404.
         assert response.status_code in (200, 501)
 
+    def test_requests_are_recorded_as_metrics(self, client, pct):
+        metrics = pytest.importorskip("metrics")
+        if not metrics.PROMETHEUS_AVAILABLE:
+            pytest.skip("prometheus_client is not installed")
+
+        client.get("/resource/lxc/status?lxc_id=104")
+        body = client.get("/metrics").get_data(as_text=True)
+        assert "lxc_autoscale_api_requests_total" in body
+        # The matched rule is used as the label, not the raw path, so the
+        # container id cannot blow up metric cardinality.
+        assert 'endpoint="/resource/lxc/status"' in body
+        assert "104" not in body.split("lxc_autoscale_api_requests_total")[1][:400]
+
+    def test_scaling_actions_are_recorded_as_metrics(self, client, pct):
+        metrics = pytest.importorskip("metrics")
+        if not metrics.PROMETHEUS_AVAILABLE:
+            pytest.skip("prometheus_client is not installed")
+
+        client.post("/scale/cores", json={"lxc_id": 104, "cores": 4})
+        body = client.get("/metrics").get_data(as_text=True)
+        assert "lxc_autoscale_scaling_actions_total" in body
+
     def test_routes_listing(self, client):
         response = client.get("/routes")
         assert response.status_code == 200
