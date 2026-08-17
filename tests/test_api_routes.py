@@ -261,6 +261,40 @@ class TestOperationalEndpoints:
         assert 'endpoint="/resource/lxc/status"' in body
         assert "104" not in body.split("lxc_autoscale_api_requests_total")[1][:400]
 
+    def test_every_declared_metric_is_populated_by_some_code_path(self, client, pct):
+        """Guards against advertising metrics nothing fills. Model-prediction
+        and circuit-breaker series used to be exported permanently empty
+        because only the separate ML process could have set them."""
+        metrics = pytest.importorskip("metrics")
+        if not metrics.PROMETHEUS_AVAILABLE:
+            pytest.skip("prometheus_client is not installed")
+
+        client.get("/resource/lxc/config?lxc_id=104")
+        client.post("/scale/cores", json={"lxc_id": 104, "cores": 4})
+        client.post("/scale/ram", json={"lxc_id": 104, "memory": 2048})
+        # And the failure path, so the failure counter is exercised too.
+        pct.responses = {("pct", "set"): RuntimeError("container is locked")}
+        client.post("/scale/cores", json={"lxc_id": 104, "cores": 8})
+        body = client.get("/metrics").get_data(as_text=True)
+
+        declared = {
+            line.split()[2]
+            for line in body.splitlines()
+            if line.startswith("# TYPE ")
+        }
+        ours = {name for name in declared if name.startswith("lxc_autoscale_")}
+        assert ours, "no project metrics were exported at all"
+
+        for name in sorted(ours):
+            # Histograms and counters expose derived series; check the family
+            # has at least one sample line with a value other than the bare
+            # declaration.
+            samples = [
+                line for line in body.splitlines()
+                if line.startswith(name) and not line.startswith("#")
+            ]
+            assert samples, f"{name} is declared but never populated"
+
     def test_scaling_actions_are_recorded_as_metrics(self, client, pct):
         metrics = pytest.importorskip("metrics")
         if not metrics.PROMETHEUS_AVAILABLE:

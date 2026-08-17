@@ -55,18 +55,6 @@ if PROMETHEUS_AVAILABLE:
         ['container_id']
     )
 
-    container_cpu_usage_percent = Gauge(
-        'lxc_autoscale_container_cpu_usage_percent',
-        'Current CPU usage percentage',
-        ['container_id']
-    )
-
-    container_memory_usage_mb = Gauge(
-        'lxc_autoscale_container_memory_usage_mb',
-        'Current memory usage in MB',
-        ['container_id']
-    )
-
 
 def metrics_endpoint():
     """Generate Prometheus metrics endpoint."""
@@ -106,9 +94,12 @@ def record_scaling_action(container_id, resource, action, success=True, failure_
             reason=failure_reason or 'unknown'
         ).inc()
 
-def update_container_resources(container_id, cpu_cores=None, memory_mb=None,
-                               cpu_usage=None, memory_usage=None):
-    """Update container resource metrics."""
+def update_container_resources(container_id, cpu_cores=None, memory_mb=None):
+    """Update the gauges for a container's allocated resources.
+
+    Usage figures are collected by the monitor, which the API never sees, so
+    there are no usage gauges here.
+    """
     if not PROMETHEUS_AVAILABLE:
         return
 
@@ -116,10 +107,6 @@ def update_container_resources(container_id, cpu_cores=None, memory_mb=None,
         container_cpu_cores.labels(container_id=container_id).set(cpu_cores)
     if memory_mb is not None:
         container_memory_mb.labels(container_id=container_id).set(memory_mb)
-    if cpu_usage is not None:
-        container_cpu_usage_percent.labels(container_id=container_id).set(cpu_usage)
-    if memory_usage is not None:
-        container_memory_usage_mb.labels(container_id=container_id).set(memory_usage)
 
 
 # Log warning if Prometheus is not available

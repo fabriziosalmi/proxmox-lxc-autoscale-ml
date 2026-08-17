@@ -136,7 +136,7 @@ scaling:
   max_ram_mb: 16384
 
   # Confidence
-  min_confidence: 70
+  min_confidence: 70  # 0 (the default) disables confidence gating
 ```
 
 ## Async Batch API Client
@@ -248,7 +248,7 @@ scaling:
   max_cpu_cores: 8
   min_ram_mb: 512
   max_ram_mb: 16384
-  min_confidence: 70
+  min_confidence: 70  # 0 (the default) disables confidence gating
 
 # Ignored Containers
 ignore_lxc: []

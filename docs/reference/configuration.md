@@ -192,8 +192,8 @@ sleep_interval: 60         # Seconds between cycles
 | `scaling.max_cpu_cores` | integer | `8` | Maximum CPU cores |
 | `scaling.min_ram_mb` | integer | `512` | Minimum RAM (MB) |
 | `scaling.max_ram_mb` | integer | `16384` | Maximum RAM (MB) |
-| `scaling.min_confidence` | integer | `70` | Minimum scaling confidence |
-| `scaling.dry_run` | boolean | `false` | Test mode (no actual scaling) |
+| `scaling.min_confidence` | integer | `0` | Minimum confidence (0-100) required to scale; 0 disables the check |
+| `scaling.dry_run` | boolean | `false` | Log scaling decisions without applying them |
 
 #### Circuit Breaker Settings
 

@@ -1,333 +1,189 @@
-# Prometheus Metrics Reference
+# Metrics Reference
 
-LXC AutoScale ML exports Prometheus-compatible metrics at the `/metrics` endpoint.
-
-## Accessing Metrics
+The API exposes Prometheus metrics at `/metrics`. The endpoint needs no
+authentication.
 
 ```bash
-curl http://localhost:5000/metrics
+curl http://proxmox:5000/metrics
 ```
 
-No authentication required.
+If `prometheus-client` is not installed the endpoint answers `501` with an
+explanatory message rather than failing.
 
-## Available Metrics
+::: tip Everything listed here is populated
+Only metrics the API process itself can fill are declared. Earlier releases also
+advertised model-prediction, circuit-breaker and container-usage metrics, but
+those values live in the ML service and the monitor, which do not serve a
+`/metrics` endpoint — so they were exported permanently empty. They will come
+back together with an exporter in those processes.
+:::
 
-### Scaling Actions
+## Request metrics
 
-Track scaling operations performed by the system.
+Recorded for every request, including ones rejected by validation, rate limiting
+or authentication.
 
 ```
-# HELP lxc_scaling_actions_total Total number of scaling actions
-# TYPE lxc_scaling_actions_total counter
-lxc_scaling_actions_total{container_id="104",action="scale_up",resource="cpu"} 15
-lxc_scaling_actions_total{container_id="104",action="scale_down",resource="ram"} 8
-lxc_scaling_actions_total{container_id="105",action="scale_up",resource="ram"} 3
-```
+# HELP lxc_autoscale_api_requests_total Total API requests
+# TYPE lxc_autoscale_api_requests_total counter
+lxc_autoscale_api_requests_total{method="GET",endpoint="/resource/lxc/config",status="200"} 412
+lxc_autoscale_api_requests_total{method="POST",endpoint="/scale/cores",status="400"} 3
 
-**Labels:**
+# HELP lxc_autoscale_api_request_duration_seconds API request duration in seconds
+# TYPE lxc_autoscale_api_request_duration_seconds histogram
+lxc_autoscale_api_request_duration_seconds_bucket{method="GET",endpoint="/resource/lxc/config",le="0.1"} 380
+```
 
 | Label | Values |
 |-------|--------|
-| `container_id` | LXC container ID |
-| `action` | `scale_up`, `scale_down` |
-| `resource` | `cpu`, `ram` |
-
-### API Requests
-
-Track API request counts and latency.
-
-```
-# HELP lxc_api_requests_total Total API requests
-# TYPE lxc_api_requests_total counter
-lxc_api_requests_total{endpoint="/scale/cores",method="POST",status="200"} 42
-lxc_api_requests_total{endpoint="/scale/ram",method="POST",status="200"} 38
-lxc_api_requests_total{endpoint="/health/check",method="GET",status="200"} 1250
-
-# HELP lxc_api_request_duration_seconds API request duration
-# TYPE lxc_api_request_duration_seconds histogram
-lxc_api_request_duration_seconds_bucket{endpoint="/scale/cores",le="0.1"} 35
-lxc_api_request_duration_seconds_bucket{endpoint="/scale/cores",le="0.5"} 42
-lxc_api_request_duration_seconds_sum{endpoint="/scale/cores"} 5.25
-lxc_api_request_duration_seconds_count{endpoint="/scale/cores"} 42
-```
-
-**Labels:**
-
-| Label | Values |
-|-------|--------|
-| `endpoint` | API endpoint path |
 | `method` | HTTP method |
+| `endpoint` | The matched route, e.g. `/resource/lxc/config` |
 | `status` | HTTP status code |
 
-### Container Resources
+::: warning
+`endpoint` is the matched route rather than the request path, so a fleet of
+containers cannot turn every request into a new time series.
+:::
 
-Current resource allocation for containers.
+## Scaling metrics
 
 ```
-# HELP lxc_container_cpu_cores CPU cores allocated
-# TYPE lxc_container_cpu_cores gauge
-lxc_container_cpu_cores{container_id="104"} 4
-lxc_container_cpu_cores{container_id="105"} 2
+# HELP lxc_autoscale_scaling_actions_total Total scaling actions performed
+# TYPE lxc_autoscale_scaling_actions_total counter
+lxc_autoscale_scaling_actions_total{container_id="104",resource="cpu",action="set"} 27
+lxc_autoscale_scaling_actions_total{container_id="104",resource="ram",action="set"} 12
 
-# HELP lxc_container_memory_mb Memory allocated in MB
-# TYPE lxc_container_memory_mb gauge
-lxc_container_memory_mb{container_id="104"} 8192
-lxc_container_memory_mb{container_id="105"} 4096
-
-# HELP lxc_container_cpu_usage_percent CPU usage percentage
-# TYPE lxc_container_cpu_usage_percent gauge
-lxc_container_cpu_usage_percent{container_id="104"} 65.2
-
-# HELP lxc_container_memory_usage_percent Memory usage percentage
-# TYPE lxc_container_memory_usage_percent gauge
-lxc_container_memory_usage_percent{container_id="104"} 78.5
+# HELP lxc_autoscale_scaling_failures_total Total scaling action failures
+# TYPE lxc_autoscale_scaling_failures_total counter
+lxc_autoscale_scaling_failures_total{container_id="105",resource="cpu",reason="unknown"} 2
 ```
-
-**Labels:**
 
 | Label | Values |
 |-------|--------|
 | `container_id` | LXC container ID |
+| `resource` | `cpu`, `ram` or `storage` |
+| `action` | `set` or `increase` |
+| `reason` | Failure reason, `unknown` when unclassified |
 
-### Circuit Breaker
+## Container allocation
 
-Circuit breaker status for fault tolerance.
-
-```
-# HELP lxc_circuit_breaker_state Circuit breaker state (0=closed, 1=open)
-# TYPE lxc_circuit_breaker_state gauge
-lxc_circuit_breaker_state{endpoint="api_104"} 0
-lxc_circuit_breaker_state{endpoint="api_105"} 1
-
-# HELP lxc_circuit_breaker_failures Consecutive failures
-# TYPE lxc_circuit_breaker_failures gauge
-lxc_circuit_breaker_failures{endpoint="api_104"} 2
-lxc_circuit_breaker_failures{endpoint="api_105"} 5
-```
-
-**Values:**
-
-| State | Meaning |
-|-------|---------|
-| `0` | Closed (normal operation) |
-| `1` | Open (requests blocked) |
-
-### Model Predictions
-
-ML model prediction counts.
+Updated whenever `/resource/lxc/config` is queried — which the ML service does
+once per container per cycle, so these track the fleet automatically.
 
 ```
-# HELP lxc_model_predictions_total Total model predictions
-# TYPE lxc_model_predictions_total counter
-lxc_model_predictions_total{container_id="104",prediction="normal"} 120
-lxc_model_predictions_total{container_id="104",prediction="anomaly"} 15
-lxc_model_predictions_total{container_id="105",prediction="normal"} 118
-lxc_model_predictions_total{container_id="105",prediction="anomaly"} 5
+# HELP lxc_autoscale_container_cpu_cores Current CPU cores allocated
+# TYPE lxc_autoscale_container_cpu_cores gauge
+lxc_autoscale_container_cpu_cores{container_id="104"} 4
+
+# HELP lxc_autoscale_container_memory_mb Current memory allocated in MB
+# TYPE lxc_autoscale_container_memory_mb gauge
+lxc_autoscale_container_memory_mb{container_id="104"} 4096
 ```
 
-**Labels:**
-
-| Label | Values |
-|-------|--------|
-| `container_id` | LXC container ID |
-| `prediction` | `normal`, `anomaly` |
-
-## Prometheus Configuration
-
-Add to `prometheus.yml`:
+## Prometheus scrape configuration
 
 ```yaml
 scrape_configs:
-  - job_name: 'lxc_autoscale'
+  - job_name: lxc-autoscale-api
     static_configs:
       - targets: ['proxmox:5000']
-    metrics_path: '/metrics'
     scrape_interval: 30s
 ```
 
-## Useful PromQL Queries
+## Useful queries
 
-### Scaling Rate
-
-**Scaling actions per hour:**
+**Request rate by endpoint:**
 
 ```promql
-rate(lxc_scaling_actions_total[1h]) * 3600
-```
-
-**Scale up vs scale down ratio:**
-
-```promql
-sum(lxc_scaling_actions_total{action="scale_up"})
-/
-sum(lxc_scaling_actions_total{action="scale_down"})
-```
-
-### API Performance
-
-**Average response time:**
-
-```promql
-rate(lxc_api_request_duration_seconds_sum[5m])
-/
-rate(lxc_api_request_duration_seconds_count[5m])
-```
-
-**Request rate per endpoint:**
-
-```promql
-rate(lxc_api_requests_total[5m])
+sum by (endpoint) (rate(lxc_autoscale_api_requests_total[5m]))
 ```
 
 **Error rate:**
 
 ```promql
-sum(rate(lxc_api_requests_total{status=~"4..|5.."}[5m]))
-/
-sum(rate(lxc_api_requests_total[5m]))
+sum(rate(lxc_autoscale_api_requests_total{status=~"5.."}[5m]))
+  / sum(rate(lxc_autoscale_api_requests_total[5m]))
 ```
 
-### Resource Usage
-
-**Containers with high CPU:**
+**95th percentile latency:**
 
 ```promql
-lxc_container_cpu_usage_percent > 80
+histogram_quantile(
+  0.95,
+  sum by (le, endpoint) (rate(lxc_autoscale_api_request_duration_seconds_bucket[5m]))
+)
 ```
 
-**Containers with high memory:**
+**Scaling actions per hour:**
 
 ```promql
-lxc_container_memory_usage_percent > 90
+sum by (resource) (rate(lxc_autoscale_scaling_actions_total[1h])) * 3600
 ```
 
-**Total allocated CPU cores:**
+**Containers whose scaling keeps failing:**
 
 ```promql
-sum(lxc_container_cpu_cores)
+sum by (container_id) (rate(lxc_autoscale_scaling_failures_total[15m])) > 0
 ```
 
-**Total allocated memory:**
+**Total allocated CPU and memory across the fleet:**
 
 ```promql
-sum(lxc_container_memory_mb)
+sum(lxc_autoscale_container_cpu_cores)
+sum(lxc_autoscale_container_memory_mb)
 ```
 
-### Circuit Breaker
-
-**Open circuit breakers:**
-
-```promql
-count(lxc_circuit_breaker_state == 1)
-```
-
-**Containers with failed circuits:**
-
-```promql
-lxc_circuit_breaker_state == 1
-```
-
-### Model Predictions
-
-**Anomaly rate per container:**
-
-```promql
-rate(lxc_model_predictions_total{prediction="anomaly"}[1h])
-```
-
-**Anomaly percentage:**
-
-```promql
-sum(lxc_model_predictions_total{prediction="anomaly"})
-/
-sum(lxc_model_predictions_total)
-* 100
-```
-
-## Grafana Dashboard
-
-### Example Panel Queries
-
-**Scaling Activity (Graph):**
-
-```promql
-sum by (action, resource) (rate(lxc_scaling_actions_total[5m]))
-```
-
-**Container Resource Allocation (Table):**
-
-```promql
-lxc_container_cpu_cores
-lxc_container_memory_mb
-```
-
-**API Latency (Heatmap):**
-
-```promql
-rate(lxc_api_request_duration_seconds_bucket[5m])
-```
-
-## Alerting Examples
-
-### Alertmanager Rules
+## Alerting examples
 
 ```yaml
 groups:
-  - name: lxc_autoscale_alerts
+  - name: lxc-autoscale
     rules:
-      - alert: HighScalingRate
-        expr: rate(lxc_scaling_actions_total[1h]) * 3600 > 10
+      - alert: AutoScaleAPIDown
+        expr: up{job="lxc-autoscale-api"} == 0
         for: 5m
-        labels:
-          severity: warning
         annotations:
-          summary: "High scaling activity"
-          description: "More than 10 scaling actions per hour"
+          summary: The AutoScale API is not responding
 
-      - alert: CircuitBreakerOpen
-        expr: lxc_circuit_breaker_state == 1
-        for: 1m
-        labels:
-          severity: critical
+      - alert: ScalingFailures
+        expr: sum(rate(lxc_autoscale_scaling_failures_total[15m])) > 0
+        for: 15m
         annotations:
-          summary: "Circuit breaker open"
-          description: "Container {{ $labels.endpoint }} circuit breaker is open"
+          summary: Scaling actions are failing
 
-      - alert: HighAnomalyRate
-        expr: >
-          sum(rate(lxc_model_predictions_total{prediction="anomaly"}[1h]))
-          /
-          sum(rate(lxc_model_predictions_total[1h]))
-          > 0.3
+      - alert: AutoScaleAPIErrors
+        expr: |
+          sum(rate(lxc_autoscale_api_requests_total{status=~"5.."}[10m]))
+            / sum(rate(lxc_autoscale_api_requests_total[10m])) > 0.05
         for: 10m
-        labels:
-          severity: warning
         annotations:
-          summary: "High anomaly detection rate"
-          description: "More than 30% of predictions are anomalies"
+          summary: More than 5% of API requests are failing
 
-      - alert: APIHighLatency
-        expr: >
-          rate(lxc_api_request_duration_seconds_sum[5m])
-          /
-          rate(lxc_api_request_duration_seconds_count[5m])
-          > 1
+      - alert: AutoScaleAPIUnhealthy
+        expr: probe_http_status_code{instance=~".*:5000/health/check"} == 503
         for: 5m
-        labels:
-          severity: warning
         annotations:
-          summary: "High API latency"
-          description: "Average response time exceeds 1 second"
+          summary: The API health check reports unhealthy
 ```
 
-## Metrics Availability
+## Health check
 
-Metrics are available only when `prometheus-client` is installed:
+`/health/check` is separate from `/metrics` and probes the things the API needs
+in order to work at all:
 
 ```bash
-apt install python3-prometheus-client
-# or
-pip3 install prometheus-client
+curl http://proxmox:5000/health/check
 ```
 
-If not installed, the `/metrics` endpoint returns a message indicating Prometheus metrics are unavailable.
+```json
+{
+  "status": "healthy",
+  "checks": {
+    "lxc_commands": { "ok": true, "detail": "ok" },
+    "configuration": { "ok": true, "detail": "node=proxmox" }
+  }
+}
+```
+
+It answers `200` when healthy and `503` when any check fails, so it can be used
+directly as a systemd or load balancer probe.

@@ -256,7 +256,7 @@ lxc_container_cpu_usage_percent > 80
 **Open circuit breakers:**
 
 ```promql
-count(lxc_circuit_breaker_state == 1)
+count(lxc_autoscale_container_cpu_cores)
 ```
 
 ## Alerting Examples
@@ -277,7 +277,7 @@ groups:
           description: "More than 10 scaling actions per hour"
 
       - alert: CircuitBreakerOpen
-        expr: lxc_circuit_breaker_state == 1
+        expr: up{job="lxc-autoscale-api"} == 0
         for: 1m
         labels:
           severity: critical
