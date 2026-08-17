@@ -17,9 +17,10 @@ CONFIGS = {
     "model": ROOT / "lxc_autoscale_ml/model/lxc_autoscale_ml.yaml",
     "monitor": ROOT / "lxc_autoscale_ml/monitor/lxc_monitor.yaml",
 }
-SOURCE = "\n".join(
-    path.read_text() for path in (ROOT / "lxc_autoscale_ml").rglob("*.py")
-)
+SOURCES = {
+    path: path.read_text() for path in (ROOT / "lxc_autoscale_ml").rglob("*.py")
+}
+SOURCE = "\n".join(SOURCES.values())
 
 # Keys whose consumer cannot be found by name because they are read through the
 # section dict rather than individually.
@@ -41,8 +42,39 @@ def leaf_keys(node, prefix=""):
             yield f"{prefix}{key}", key
 
 
-def is_read_by_code(leaf):
-    return bool(re.search(rf"""['"]{re.escape(leaf)}['"]""", SOURCE))
+def quoted(name, text):
+    return bool(re.search(rf"""['"]{re.escape(name)}['"]""", text))
+
+
+def ambiguous_leaves():
+    """Leaf names that appear under more than one section, anywhere.
+
+    For these, finding the leaf in the source proves nothing: `max_retries`
+    lives under both `lxc` and `retry_logic`, and only the second is read. That
+    is how `lxc.max_retries` passed this check while doing nothing.
+    """
+    seen = {}
+    for path in CONFIGS.values():
+        for dotted, leaf in leaf_keys(yaml.safe_load(path.read_text())):
+            seen.setdefault(leaf, set()).add(dotted)
+    return {leaf for leaf, paths in seen.items() if len(paths) > 1}
+
+
+AMBIGUOUS = ambiguous_leaves()
+
+
+def is_read_by_code(dotted, leaf):
+    if leaf not in AMBIGUOUS:
+        return quoted(leaf, SOURCE)
+
+    # Ambiguous leaf: require some module to mention both the section and the
+    # leaf, so a setting cannot borrow another section's consumer.
+    section = dotted.rsplit(".", 1)[0] if "." in dotted else None
+    if section is None:
+        return quoted(leaf, SOURCE)
+    return any(
+        quoted(section, text) and quoted(leaf, text) for text in SOURCES.values()
+    )
 
 
 @pytest.mark.parametrize("name", sorted(CONFIGS))
@@ -51,7 +83,7 @@ def test_every_shipped_key_is_read_by_code(name):
     unread = [
         dotted
         for dotted, leaf in leaf_keys(config)
-        if dotted not in READ_INDIRECTLY and not is_read_by_code(leaf)
+        if dotted not in READ_INDIRECTLY and not is_read_by_code(dotted, leaf)
     ]
     assert not unread, (
         f"{CONFIGS[name].name} ships keys no code reads: {unread}. "

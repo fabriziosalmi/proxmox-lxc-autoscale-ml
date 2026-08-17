@@ -68,10 +68,13 @@ class TestEndpoints:
         assert not unknown, f"documented endpoints that do not exist: {unknown}"
 
     def test_every_route_is_documented(self, real_routes):
+        """Compared as whole strings: with a substring check, `/scale/core`
+        would look documented because `/scale/cores` is present."""
         reference = (ROOT / "docs/reference/api-endpoints.md").read_text()
+        documented = set(self.ENDPOINT.findall(reference))
         undocumented = sorted(
             route for route in real_routes
-            if route != "/" and route not in reference
+            if route != "/" and route not in documented
         )
         assert not undocumented, (
             f"routes missing from the API reference: {undocumented}"
@@ -128,20 +131,45 @@ class TestServiceNames:
 
 
 class TestPythonVersionIsConsistent:
-    def test_docs_agree_with_ci(self):
-        ci = (ROOT / ".github/workflows/ci.yml").read_text()
-        versions = set(re.findall(r"'(3\.\d+)'", ci))
-        assert "3.13" not in versions, (
-            "CI claims 3.13 support, but the pinned numpy/pandas/scikit-learn "
-            "have no 3.13 wheels"
-        )
+    """The docs must state whatever range CI actually tests.
 
-        for path in ["README.md", "docs/guide/requirements.md", "docs/index.md"]:
+    Derived from the matrix rather than pinned to specific versions, so raising
+    the floor or the ceiling does not require editing this test -- it requires
+    editing the docs, which is the point.
+    """
+
+    DOCS_STATING_THE_RANGE = [
+        "README.md", "docs/guide/requirements.md", "docs/index.md",
+    ]
+
+    def matrix_versions(self):
+        ci = (ROOT / ".github/workflows/ci.yml").read_text()
+        matrix = re.search(r"python-version:\s*\[([^\]]+)\]", ci)
+        assert matrix, "could not find the python-version matrix in ci.yml"
+        versions = re.findall(r"3\.\d+", matrix.group(1))
+        assert versions, "the python-version matrix is empty"
+        return versions
+
+    def test_docs_state_the_tested_range(self):
+        versions = self.matrix_versions()
+        floor, ceiling = versions[0], versions[-1]
+
+        for path in self.DOCS_STATING_THE_RANGE:
             text = (ROOT / path).read_text()
-            assert "3.10" in text and "3.12" in text, (
-                f"{path} does not state the supported Python range"
+            assert floor in text and ceiling in text, (
+                f"CI tests Python {floor} to {ceiling}, but {path} does not "
+                f"state that range"
             )
             assert "Python 3.x" not in text, f"{path} still says 'Python 3.x'"
+
+    def test_requirements_agree_with_the_matrix(self):
+        """The stated floor has to be installable, not aspirational."""
+        stated = (ROOT / "requirements.txt").read_text()
+        floor, ceiling = self.matrix_versions()[0], self.matrix_versions()[-1]
+        assert f"{floor}-{ceiling}" in stated, (
+            f"requirements.txt should record the supported range "
+            f"({floor}-{ceiling}) so it is visible where the pins are"
+        )
 
 
 class TestNoMarketingClaims:

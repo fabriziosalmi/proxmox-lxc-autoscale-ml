@@ -86,8 +86,9 @@ circuit_breaker:
   timeout_seconds: 300  # How long the circuit stays open before retrying
 
 # Ignored Containers
-ignore_lxc:
-  # List container IDs to exclude from autoscaling
-  # Example: ["100", "999"] 
-  # Note: 101 and 102 are common first container IDs - don't ignore them by default!
-  []  # Empty list = scale all containers
+# Container IDs to exclude from autoscaling. An empty list scales everything.
+# IDs are matched as strings, so [101, 102] and ["101", "102"] both work.
+# Example: ignore_lxc: ["100", "999"]
+# Note: 101 and 102 are commonly the first containers on a host, so do not
+# ignore them out of habit.
+ignore_lxc: []
