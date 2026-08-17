@@ -42,7 +42,8 @@ Add new settings to `/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml`:
 ```yaml
 authentication:
   enabled: true
-  api_key: "your-secret-key-here"  # Generate with: openssl rand -hex 32
+  api_keys:
+    - "your-secret-key-here"  # Generate with: openssl rand -hex 32
 
 rate_limiting:
   enabled: true
@@ -68,8 +69,8 @@ circuit_breaker:              # NEW section
 Add new settings to `/etc/lxc_autoscale_ml/lxc_monitor.yaml`:
 
 ```yaml
-metrics:
-  max_entries: 1000           # NEW: Automatic size limiting
+monitoring:
+  max_metrics_entries: 1000   # NEW: bounds the metrics file
 ```
 
 ### Step 6: Start Services

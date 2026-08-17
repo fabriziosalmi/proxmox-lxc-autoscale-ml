@@ -1,10 +1,15 @@
 # LXC AutoScale ML
 
-**LXC AutoScale ML** is a resource management daemon for Proxmox environments. It monitors LXC container resources and adjusts CPU and memory allocations with zero downtime, using machine learning to predict resource demands.
+**LXC AutoScale ML** adjusts the CPU and memory allocated to Proxmox LXC
+containers. It collects per-container metrics, trains an anomaly detection model
+on each container's own history, and applies changes through `pct` on the host.
+Resizing CPU and memory with `pct set` does not restart the container.
 
-**Tested with Proxmox VE 8.2.4**
+Three systemd services, sharing nothing but a metrics file on disk.
 
-![Platform](https://img.shields.io/badge/platform-Proxmox-green) ![Python Version](https://img.shields.io/badge/python-3.x-blue) ![License](https://img.shields.io/badge/license-MIT-blue)
+**Developed and tested on Proxmox VE 8 (Debian 12).**
+
+![Platform](https://img.shields.io/badge/platform-Proxmox%20VE%208-green) ![Python Version](https://img.shields.io/badge/python-3.10--3.12-blue) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ![LXC AutoScale ML Architecture](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_autoscale_ml.png?raw=true)
 
@@ -38,26 +43,43 @@
 
 ## Overview
 
-LXC AutoScale ML manages LXC containers on Proxmox hosts using machine learning for automatic scaling. It dynamically adjusts container resources to maintain optimal performance and efficient resource utilization.
+A monitor writes container metrics to a JSON file, a model reads that file and
+decides whether anything should change, and an API carries the decision out by
+running `pct`. Each runs as its own systemd service.
 
-### Key Features
+### What it does
 
-- **Proxmox Integration**: Seamless integration with Proxmox hosts via API and CLI.
-- **ML-Driven Autoscaling**: Utilizes IsolationForest machine learning model to detect anomalies and predict resource demands.
-- **High-Performance Async API**: Batch async requests provide **10x faster** config fetching for large-scale deployments (60+ containers).
-- **Enterprise Security**: API key authentication, rate limiting with localhost bypass, input validation on all endpoints.
-- **Circuit Breaker Pattern**: Automatic fault tolerance and graceful degradation for API failures.
-- **Modular Architecture**: Components (API, Monitor, Model) designed to handle specific autoscaling tasks.
-- **Customizable Policies**: Define custom scaling rules, thresholds, and step sizes.
-- **Real-Time Monitoring**: Prometheus metrics export for comprehensive observability.
-- **Smart Resource Management**: Incremental scaling (no more jumping to max/min), stale lock cleanup, metrics file size limiting.
-- **Production-Ready**: Comprehensive error handling, detailed logging, and troubleshooting guides.
+- **Learns per container.** An IsolationForest is trained on each container's
+  own history, so "unusual" is relative to that container rather than a fixed
+  rule.
+- **Moves in steps, within limits.** Scaling adds or removes one configured
+  step at a time, between a floor and a ceiling you set.
+- **Fetches configurations concurrently**, with a bounded concurrency limit, so
+  a cycle does not grow linearly with the number of containers.
+- **Backs off from a failing API.** After repeated failures a circuit breaker
+  stops calling it for that container until a timeout expires.
+- **Can rehearse.** `dry_run: true` logs the decision it would have taken and
+  calls nothing.
+- **Exports Prometheus metrics** at `/metrics` — request, scaling and container
+  allocation series.
+- **Optional API authentication**: API keys, per-IP rate limiting and input
+  validation on every endpoint. Authentication is off by default.
+
+### What it does not do
+
+- It does not resize disks automatically; `/scale/storage/increase` exists but
+  nothing calls it on its own.
+- It does not migrate containers between nodes.
+- Per-container I/O statistics come from `/proc/diskstats`, which is not
+  namespaced, so they reflect the host's disks rather than the container's.
 
 ## System Requirements
 
-- **Proxmox Host**: Version 6.x or higher (tested on 8.2.4)
-- **Operating System**: Linux (Debian-based preferred)
-- **Python**: Version 3.x
+- **Proxmox host**: VE 8 (Debian 12). Developed and tested there.
+- **Operating system**: Debian-based Linux
+- **Python**: 3.10 to 3.12. Proxmox VE 9 ships 3.13, which the pinned
+  `numpy`, `pandas` and `scikit-learn` do not yet support — the API and the
+  monitor run there, the model does not.
 - **Dependencies**:
   ```bash
   git, python3-flask, python3-requests, python3-sklearn, python3-pandas, 
@@ -120,21 +142,20 @@ curl -sSL https://raw.githubusercontent.com/fabriziosalmi/proxmox-lxc-autoscale-
 
 ### 1. API Component
 
-The **API** provides RESTful endpoints for managing autoscaling services with enterprise-grade security and performance.
+An HTTP interface over the `pct` command line. It runs as root under gunicorn,
+because `pct` requires it.
 
-#### Features
-
-- **Scaling Operations**: Trigger container scaling manually or via automation.
-- **Configuration Management**: Dynamically update scaling configurations.
-- **Security Features**:
-  - **API Key Authentication**: Secure all endpoints (except health checks and metrics)
-  - **Rate Limiting**: 120 requests/minute with localhost bypass for internal services
-  - **Input Validation**: Comprehensive validation on all parameters
-- **Monitoring and Health Checks**: 
-  - Real-time metrics and system status
-  - **Prometheus Metrics Export**: Track scaling actions, API requests, resource usage
-- **Audit Logging**: Complete logs of all API interactions for security and debugging.
-- **High Performance**: Handles 60+ containers with ease via optimized async operations.
+- **Scaling, snapshot and clone operations**, each validated before a command is
+  built. Commands are passed to the kernel as argument lists, never through a
+  shell.
+- **API key authentication**, off by default, exempting `/health/check` and
+  `/metrics`. Keys are compared in constant time.
+- **Per-IP rate limiting**, 120 requests per minute by default, with localhost
+  exempt so the model is not throttled.
+- **Prometheus metrics** at `/metrics`: request counts and durations, scaling
+  actions and failures, and per-container CPU and memory allocation.
+- **A health check that can fail.** `/health/check` probes `pct` and the
+  configured node, and returns 503 when either is broken.
 
 #### API Endpoints
 
@@ -167,35 +188,42 @@ The **API** provides RESTful endpoints for managing autoscaling services with en
 
 ### 2. Monitor Component
 
-The **Monitor** service continuously tracks the performance and resource usage of LXC containers.
+Reads figures out of each running container and appends them to a JSON file. It
+makes no decisions; it only records.
 
-#### Features
+- **Per-container CPU, memory, swap, process count, I/O, network and filesystem
+  usage**, gathered with `pct exec`.
+- **CPU as usage over the interval**, computed by differencing two `/proc/stat`
+  readings. A single reading would give the container's average since boot.
+- **Concurrent collection** across containers, with a per-probe retry. One
+  unreachable container does not cost the cycle.
+- **A bounded file**: the newest 1000 cycles are kept, written through a
+  temporary file and renamed into place so a crash cannot truncate it.
 
-- **Real-Time Metrics Collection**: Collects CPU, memory, disk, and network usage statistics.
-- **Anomaly Detection**: Detects unusual patterns in resource usage.
-- **Threshold Alerts**: Triggers alerts or scaling actions when predefined thresholds are exceeded.
-- **Data Aggregation**: Aggregates metrics for analysis and reporting.
-- **Automatic Size Management**: Limits metrics file to 1000 entries to prevent memory issues.
-- **Efficient Storage**: Optimized JSON storage with automatic cleanup of old data.
+Note that `/proc/diskstats` is not namespaced, so the I/O figures reflect the
+host's disks rather than the container's.
 
 ### 3. Model Component
 
-The **Model** uses machine learning algorithms to analyze metrics and make intelligent scaling decisions.
+Reads the metrics file, decides what should change, and asks the API to do it.
 
-#### Features
+- **IsolationForest**, retrained each cycle on the full history in the file, to
+  flag samples that are unusual for that container.
+- **Threshold comparison** against the latest sample decides the direction;
+  resources then move by one configured step, bounded by a floor and a ceiling.
+- **`min_confidence`** can require the prediction to sit a given distance from
+  the model's decision boundary before anything is applied. Confidence is that
+  distance mapped onto 0-100, not a probability.
+- **Concurrent configuration fetches** with a bounded concurrency limit and
+  exponential backoff on server errors.
+- **A circuit breaker** that stops calling the API for a container after
+  repeated failures until a timeout expires.
+- **`dry_run`** logs the decision it would have taken and calls nothing.
+- **A single-instance lock** created with `O_EXCL`, with stale locks from a
+  crashed process detected by PID and reclaimed.
 
-- **IsolationForest ML Model**: Detects anomalies in resource usage patterns with high accuracy.
-- **Incremental Scaling**: Scales resources gradually (±1 core, ±512MB RAM) instead of jumping to extremes.
-- **Predictive Scaling**: Forecasts when scaling actions are necessary based on historical data.
-- **Adaptive Learning**: Continuously refines predictions based on new data.
-- **High-Performance Async API Client**: Fetches all container configs concurrently (**10x faster** than sequential).
-- **Circuit Breaker Pattern**: Automatically skips failed API endpoints to prevent cascading failures.
-- **Smart Resource Management**:
-  - Stale lock cleanup with PID checking
-  - Graceful degradation on API errors
-  - Automatic retry with exponential backoff
-- **Configurable Models**: Supports various ML algorithms and custom thresholds.
-- **Production-Ready**: Comprehensive error handling and detailed logging.
+It reacts to the newest sample rather than forecasting future demand, and
+IsolationForest is the only model it supports.
 
 ## Usage and Control
 
@@ -219,30 +247,34 @@ Manage the autoscaling services with the following commands:
 
 - **Prometheus Metrics**: Native Prometheus metrics export at `/metrics` endpoint
   - Scaling actions counter
-  - API request/response metrics  
-  - Container resource gauges
-  - Circuit breaker status
-  - Model prediction accuracy
-- **Metrics Dashboard**: Integrate with tools like Grafana for visualization.
-- **Alerting**: Configure alerts for critical events, such as spikes in CPU or memory usage.
-- **Performance Monitoring**: Track batch API performance (containers/sec) in service logs.
+  - Request counts and durations, labelled by the matched route
+  - Scaling actions and failures, by container and resource
+  - Per-container CPU and memory allocation
+- **Alerting**: see the [metrics reference](docs/reference/metrics.md) for
+  worked alert rules.
+- **Batch fetch timing** is logged each cycle (`Batch fetch completed in ...`).
 
-#### Example Prometheus Queries
+#### Example Prometheus queries
 
 ```promql
-# Total scaling actions in last hour
-rate(lxc_scaling_actions_total[1h])
+# Scaling actions per hour, by resource
+sum by (resource) (rate(lxc_autoscale_scaling_actions_total[1h])) * 3600
 
-# Containers scaled up vs down
-lxc_scaling_actions_total{action="scale_up"} / lxc_scaling_actions_total{action="scale_down"}
+# Containers whose scaling keeps failing
+sum by (container_id) (rate(lxc_autoscale_scaling_failures_total[15m])) > 0
 
 # Average API response time
-rate(lxc_api_request_duration_seconds_sum[5m]) / rate(lxc_api_request_duration_seconds_count[5m])
+rate(lxc_autoscale_api_request_duration_seconds_sum[5m])
+  / rate(lxc_autoscale_api_request_duration_seconds_count[5m])
+
+# Total CPU and memory allocated across the fleet
+sum(lxc_autoscale_container_cpu_cores)
+sum(lxc_autoscale_container_memory_mb)
 ```
 
 ## Documentation
 
-For comprehensive documentation, visit the **[Documentation Site](./docs/)** or build it locally:
+Full documentation is on the [documentation site](./docs/), or build it locally:
 
 ```bash
 cd docs
@@ -297,7 +329,7 @@ If You like my projects, you may also like these ones:
 
 - [caddy-waf](https://github.com/fabriziosalmi/caddy-waf) Caddy WAF (Regex Rules, IP and DNS filtering, Rate Limiting, GeoIP, Tor, Anomaly Detection) 
 - [patterns](https://github.com/fabriziosalmi/patterns) Automated OWASP CRS and Bad Bot Detection for Nginx, Apache, Traefik and HaProxy
-- [blacklists](https://github.com/fabriziosalmi/blacklists) Hourly updated domains blacklist 🚫 
+- [blacklists](https://github.com/fabriziosalmi/blacklists) Hourly updated domains blacklist 
 - [proxmox-vm-autoscale](https://github.com/fabriziosalmi/proxmox-vm-autoscale) Automatically scale virtual machines resources on Proxmox hosts 
 - [UglyFeed](https://github.com/fabriziosalmi/UglyFeed) Retrieve, aggregate, filter, evaluate, rewrite and serve RSS feeds using Large Language Models for fun, research and learning purposes 
 - [proxmox-lxc-autoscale](https://github.com/fabriziosalmi/proxmox-lxc-autoscale) Automatically scale LXC containers resources on Proxmox hosts 

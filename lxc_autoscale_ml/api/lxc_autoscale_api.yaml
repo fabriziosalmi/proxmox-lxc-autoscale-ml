@@ -13,17 +13,11 @@ lxc:
   # Name or IP address of the Proxmox node where LXC containers are managed.
   node: "proxmox"  # Replace with your Proxmox node name or IP. Note: if node name or hostname won't work use IP address instead, should work as expected.
   
-  # Whether to verify SSL certificates. Set to false for local commands.
-  verify_ssl: false  # Not applicable since we are using local commands
-  
   # Default storage location for LXC containers.
   default_storage: "local-lvm"  # Default storage location
   
   # Timeout for operations in seconds.
   timeout_seconds: 10
-  
-  # Maximum number of retry attempts for operations.
-  max_retries: 3
 
 rate_limiting:
   # Enable or disable rate limiting globally

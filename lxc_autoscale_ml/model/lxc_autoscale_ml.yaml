@@ -41,9 +41,6 @@ spike_detection:
 
 # Scaling Configuration
 scaling:
-  total_cores: 4  # Total number of CPU cores available on the server
-  total_ram_mb: 16384  # Total RAM available on the server in MB
-  target_cpu_load_percent: 50  # Target CPU load percentage after scaling
   max_cpu_cores: 4  # Maximum number of CPU cores to maintain per container
   max_ram_mb: 8192  # Maximum RAM to maintain per container in MB
   min_cpu_cores: 2  # Minimum number of CPU cores to maintain per container
@@ -54,9 +51,12 @@ scaling:
   cpu_scale_down_threshold: 30  # CPU usage percentage to trigger scale-down
   ram_scale_up_threshold: 75  # RAM usage percentage to trigger scale-up
   ram_scale_down_threshold: 30  # RAM usage percentage to trigger scale-down
-  ram_chunk_size: 50  # Minimum RAM scaling chunk size in MB
-  ram_upper_limit: 1024  # Maximum RAM scaling limit in one step in MB
-  dry_run: false  # If true, perform a dry run without making actual API calls
+  # Minimum confidence (0-100) required before a scaling action is applied.
+  # 0 disables the check. Confidence is the distance of the prediction from the
+  # model's decision boundary.
+  min_confidence: 0
+
+  dry_run: false  # If true, log scaling decisions without calling the API
 
 # API Configuration
 api:
@@ -79,15 +79,11 @@ retry_logic:
 # Interval Configuration
 interval_seconds: 600  # Time interval between consecutive script runs in seconds
 
-# Feature Engineering Configuration
-feature_engineering:
-  include_io_activity: true  # Include IO activity as a feature in the model
-  include_network_activity: true  # Include network activity as a feature in the model
-
-# Prediction Configuration
-prediction:
-  use_latest_only: false  # If true, use only the latest data point for prediction
-  include_rolling_features: true  # Include rolling mean and std features for prediction
+# Circuit Breaker for API calls
+circuit_breaker:
+  enabled: true  # Stop calling the API for a container after repeated failures
+  failure_threshold: 3  # Consecutive failures before the circuit opens
+  timeout_seconds: 300  # How long the circuit stays open before retrying
 
 # Ignored Containers
 ignore_lxc:

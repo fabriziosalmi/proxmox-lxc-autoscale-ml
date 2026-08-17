@@ -95,9 +95,9 @@ curl http://localhost:5000/metrics
 **Response (200 OK):**
 
 ```
-# HELP lxc_scaling_actions_total Total scaling actions
-# TYPE lxc_scaling_actions_total counter
-lxc_scaling_actions_total{container_id="104",action="scale_up",resource="cpu"} 15
+# HELP lxc_autoscale_scaling_actions_total Total scaling actions performed
+# TYPE lxc_autoscale_scaling_actions_total counter
+lxc_autoscale_scaling_actions_total{container_id="104",resource="cpu",action="set"} 15
 ...
 ```
 

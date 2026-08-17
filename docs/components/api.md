@@ -31,7 +31,8 @@ All endpoints except `/health/check` and `/metrics` require authentication.
 ```yaml
 authentication:
   enabled: true
-  api_key: "your-secret-api-key"
+  api_keys:
+    - "your-secret-api-key"
 ```
 
 **Usage:**
@@ -307,7 +308,8 @@ server:
 # Authentication
 authentication:
   enabled: true
-  api_key: "your-secret-api-key"
+  api_keys:
+    - "your-secret-api-key"
 
 # Rate limiting
 rate_limiting:
@@ -317,10 +319,16 @@ rate_limiting:
 
 # Logging
 logging:
-  log_level: "INFO"
-  log_file: "/var/log/autoscaleapi.log"
-  access_log: "/var/log/autoscaleapi_access.log"
-  error_log: "/var/log/autoscaleapi_error.log"
+  level: "INFO"
+  # log_file: "/var/log/lxc_autoscale_api.log"  # unset: stdout only
+  rotate: true
+  max_log_size_mb: 100
+  backup_count: 5
+
+# HTTP access and error logs belong to gunicorn
+gunicorn:
+  access_log_file: "/var/log/lxc_autoscale_api_access.log"
+  error_log_file: "/var/log/lxc_autoscale_api_error.log"
 ```
 
 ## Log Files

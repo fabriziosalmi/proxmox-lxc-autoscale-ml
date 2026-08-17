@@ -1,6 +1,6 @@
 # Architecture
 
-LXC AutoScale ML uses a modular architecture with three main components that work together to provide intelligent autoscaling.
+LXC AutoScale ML is three separate systemd services that share nothing but a metrics file on disk.
 
 ## System Overview
 
@@ -202,7 +202,7 @@ Container 3 ─┼──▶ API (parallel) ──▶ All Responses
 ...          │
 Container 60─┘
                     │
-                    └─ Total: ~0.6s (10x faster)
+                    └─ issued concurrently, bounded by api.max_concurrent
 ```
 
 ## Circuit Breaker Pattern

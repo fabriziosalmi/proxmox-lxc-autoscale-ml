@@ -143,7 +143,8 @@ Edit `/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml`:
 ```yaml
 authentication:
   enabled: true
-  api_key: "your-generated-key-here"
+  api_keys:
+    - "your-generated-key-here"
 ```
 
 Restart the API service:

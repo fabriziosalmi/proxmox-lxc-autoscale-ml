@@ -142,7 +142,8 @@ Update the authentication section:
 ```yaml
 authentication:
   enabled: true
-  api_key: "your-secure-api-key-here"
+  api_keys:
+    - "your-secure-api-key-here"
 ```
 
 ::: tip
