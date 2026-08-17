@@ -1,0 +1,7 @@
+# Tooling for linting and running the test suite.
+# The runtime dependencies live in requirements.txt; the tests stub out every
+# Proxmox call, so pandas/scikit-learn are not needed to run them.
+-r requirements.txt
+
+pytest==8.4.2
+ruff==0.14.4

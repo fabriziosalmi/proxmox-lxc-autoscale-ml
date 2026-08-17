@@ -1,0 +1,39 @@
+version: 2
+updates:
+  # Python runtime and tooling dependencies
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      python-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # VitePress documentation site
+  - package-ecosystem: npm
+    directory: "/docs"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      docs-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Pinned action versions in the workflows
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - "*"

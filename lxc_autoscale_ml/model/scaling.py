@@ -7,11 +7,11 @@ import requests
 def determine_scaling_action(latest_metrics, scaling_decision, confidence, config):
     """
     Determine CPU and RAM scaling actions based on usage metrics and thresholds.
-    
+
     This function evaluates container resource usage against configured thresholds
     and determines whether to scale up, scale down, or maintain current resources.
     Scaling is performed incrementally using configured step sizes.
-    
+
     Args:
         latest_metrics (pd.Series): Container metrics including:
             - cpu_usage_percent: Current CPU usage as percentage
@@ -21,7 +21,7 @@ def determine_scaling_action(latest_metrics, scaling_decision, confidence, confi
         scaling_decision (int): IsolationForest prediction (-1=anomaly, 1=normal)
         confidence (float): Prediction confidence percentage (0-100)
         config (dict): Configuration containing 'scaling' section with thresholds
-    
+
     Returns:
         tuple: (cpu_action, ram_action, new_cores, new_ram)
             - cpu_action (str): "Scale Up", "Scale Down", or "No Scaling"
@@ -33,7 +33,7 @@ def determine_scaling_action(latest_metrics, scaling_decision, confidence, confi
     ram_action = "No Scaling"
     new_cores = None
     new_ram = None
-    
+
     cpu_usage = latest_metrics["cpu_usage_percent"]
     memory_usage_mb = latest_metrics["memory_usage_mb"]
     current_ram_mb = latest_metrics.get("current_ram_mb", config["scaling"].get("min_ram_mb", 1024))
@@ -49,7 +49,7 @@ def determine_scaling_action(latest_metrics, scaling_decision, confidence, confi
     # Anomalies (-1) indicate unusual resource patterns that may need scaling
     if scaling_decision == -1:
         logging.debug("Anomaly detected. Evaluating for potential scaling based on thresholds.")
-    
+
     # Check threshold-based scaling
     if cpu_usage > thresholds["cpu_scale_up_threshold"]:
         cpu_action = "Scale Up"
@@ -57,7 +57,7 @@ def determine_scaling_action(latest_metrics, scaling_decision, confidence, confi
     elif cpu_usage < thresholds["cpu_scale_down_threshold"]:
         cpu_action = "Scale Down"
         logging.debug(f"CPU usage {cpu_usage}% is below the scale-down threshold.")
-    
+
     if memory_usage_percent > thresholds["ram_scale_up_threshold"]:
         ram_action = "Scale Up"
         logging.debug(f"Memory usage {memory_usage_percent:.1f}% exceeds the scale-up threshold.")
@@ -68,17 +68,17 @@ def determine_scaling_action(latest_metrics, scaling_decision, confidence, confi
     # Get current resources from the container
     current_cores = latest_metrics.get("current_cores", thresholds.get("min_cpu_cores", 2))
     current_ram = latest_metrics.get("current_ram_mb", thresholds.get("min_ram_mb", 1024))
-    
+
     # Calculate incremental scaling steps
     cpu_step = thresholds.get("cpu_scale_step", 1)  # Scale by 1 core at a time by default
     ram_step = thresholds.get("ram_scale_step_mb", 512)  # Scale by 512MB at a time by default
-    
+
     # Ensure scaling stays within limits with incremental changes
     if cpu_action == "Scale Up":
         new_cores = min(current_cores + cpu_step, thresholds["max_cpu_cores"])
     elif cpu_action == "Scale Down":
         new_cores = max(current_cores - cpu_step, thresholds["min_cpu_cores"])
-    
+
     if ram_action == "Scale Up":
         new_ram = min(current_ram + ram_step, thresholds["max_ram_mb"])
     elif ram_action == "Scale Down":
@@ -93,16 +93,16 @@ def determine_scaling_action(latest_metrics, scaling_decision, confidence, confi
 def apply_scaling(lxc_id, new_cores, new_ram, config):
     """
     Apply CPU and/or RAM scaling changes to a container via the API.
-    
+
     Makes POST requests to the scaling API endpoints with retry logic.
     Both CPU and RAM scaling are attempted independently.
-    
+
     Args:
         lxc_id (str): Container ID to scale
         new_cores (int): Target CPU cores (None to skip CPU scaling)
         new_ram (int): Target RAM in MB (None to skip RAM scaling)
         config (dict): Configuration containing API settings and retry logic
-    
+
     Returns:
         None
     """

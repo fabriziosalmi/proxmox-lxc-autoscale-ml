@@ -7,10 +7,10 @@ def create_lock_file(lock_file):
     """
     Create a lock file with PID to prevent multiple instances.
     Automatically cleans up stale locks from crashed processes.
-    
+
     Args:
         lock_file: Path to the lock file
-        
+
     Raises:
         SystemExit: If another instance is already running
     """
@@ -18,14 +18,14 @@ def create_lock_file(lock_file):
     if os.path.exists(lock_file):
         try:
             # Read the PID from the lock file
-            with open(lock_file, 'r') as f:
+            with open(lock_file) as f:
                 content = f.read().strip()
                 if not content:
                     logging.warning(f"Lock file {lock_file} is empty, removing stale lock")
                     os.remove(lock_file)
                 else:
                     old_pid = int(content)
-                    
+
                     # Check if the process is still running
                     try:
                         # Sending signal 0 checks if process exists without killing it
@@ -41,13 +41,13 @@ def create_lock_file(lock_file):
                             f"lock age: {lock_age:.0f}s)"
                         )
                         os.remove(lock_file)
-        except (ValueError, IOError) as e:
+        except (OSError, ValueError) as e:
             logging.warning(f"Error reading lock file {lock_file}: {e}, removing it")
             try:
                 os.remove(lock_file)
             except OSError:
                 pass
-    
+
     # Create new lock file with current PID
     with open(lock_file, 'w') as lf:
         lf.write(str(os.getpid()))

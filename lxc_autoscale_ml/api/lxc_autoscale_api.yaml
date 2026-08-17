@@ -1,3 +1,14 @@
+# HTTP listener
+server:
+  # Address the API binds to. 0.0.0.0 keeps the historical behaviour and exposes
+  # the API on every interface. The API runs as root and executes pct commands,
+  # so bind it to 127.0.0.1 unless the ML service runs on a different host --
+  # and enable authentication below if it does.
+  host: "0.0.0.0"
+
+  # TCP port the API listens on.
+  port: 5000
+
 lxc:
   # Name or IP address of the Proxmox node where LXC containers are managed.
   node: "proxmox"  # Replace with your Proxmox node name or IP. Note: if node name or hostname won't work use IP address instead, should work as expected.

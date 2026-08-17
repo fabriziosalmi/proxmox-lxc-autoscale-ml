@@ -8,11 +8,11 @@ from logging.handlers import TimedRotatingFileHandler
 from subprocess import check_output, CalledProcessError
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 import aiofiles
 
 # Load configuration from YAML file
-with open("/etc/lxc_autoscale_ml/lxc_monitor.yaml", 'r') as config_file:
+with open("/etc/lxc_autoscale_ml/lxc_monitor.yaml") as config_file:
     config = yaml.safe_load(config_file)
 
 # Set up logging configuration
@@ -52,7 +52,7 @@ RETRY_LIMIT = config['monitoring'].get('retry_limit', 3)  # Maximum retry attemp
 RETRY_DELAY = config['monitoring'].get('retry_delay', 2)  # Delay between retries in seconds
 MAX_METRICS_ENTRIES = config['monitoring'].get('max_metrics_entries', 1000)  # Limit file size
 
-def get_running_lxc_containers() -> List[str]:
+def get_running_lxc_containers() -> list[str]:
     """Retrieve a list of running LXC containers."""
     try:
         pct_output = check_output(['pct', 'list'], text=True).splitlines()
@@ -61,7 +61,7 @@ def get_running_lxc_containers() -> List[str]:
         logger.error(f"Error retrieving LXC containers: {e}")
         return []
 
-def run_command(command: List[str]) -> Optional[str]:
+def run_command(command: list[str]) -> Optional[str]:
     """Run a shell command in a thread pool."""
     try:
         return check_output(command, text=True)
@@ -82,11 +82,11 @@ async def retry_on_failure(func: Any, *args, **kwargs) -> Any:
                 logger.error(f"All {RETRY_LIMIT} attempts failed for {func.__name__}.")
                 raise
 
-async def get_container_metric(command: List[str], executor: ThreadPoolExecutor) -> Optional[str]:
+async def get_container_metric(command: list[str], executor: ThreadPoolExecutor) -> Optional[str]:
     """Helper function to execute commands asynchronously in containers."""
     return await asyncio.get_event_loop().run_in_executor(executor, run_command, command)
 
-async def parse_meminfo(container_id: str, executor: ThreadPoolExecutor) -> Dict[str, float]:
+async def parse_meminfo(container_id: str, executor: ThreadPoolExecutor) -> dict[str, float]:
     """Retrieve memory and swap usage inside the container."""
     mem_info = {}
     for metric, key in [('MemTotal', 'memory_usage_mb'), ('MemAvailable', 'memory_free_mb'),
@@ -117,7 +117,7 @@ async def get_container_cpu_usage(container_id: str, executor: ThreadPoolExecuto
         return 100 * (1 - (idle_time / total_time))
     return 0.0
 
-async def get_container_io_stats(container_id: str, executor: ThreadPoolExecutor) -> Dict[str, int]:
+async def get_container_io_stats(container_id: str, executor: ThreadPoolExecutor) -> dict[str, int]:
     """Retrieve I/O statistics inside the container."""
     command = ['pct', 'exec', container_id, '--', 'grep', '', '/proc/diskstats']
     result = await get_container_metric(command, executor)
@@ -137,7 +137,7 @@ async def get_container_io_stats(container_id: str, executor: ThreadPoolExecutor
         return io_stats
     return {}
 
-async def get_container_network_usage(container_id: str, executor: ThreadPoolExecutor) -> Dict[str, int]:
+async def get_container_network_usage(container_id: str, executor: ThreadPoolExecutor) -> dict[str, int]:
     """Retrieve network usage inside the container."""
     if not ENABLE_NETWORK:
         return {"rx_bytes": 0, "tx_bytes": 0}
@@ -159,7 +159,7 @@ async def get_container_network_usage(container_id: str, executor: ThreadPoolExe
         return {"rx_bytes": rx_bytes, "tx_bytes": tx_bytes}
     return {"rx_bytes": 0, "tx_bytes": 0}
 
-async def get_container_filesystem_usage(container_id: str, executor: ThreadPoolExecutor) -> Dict[str, float]:
+async def get_container_filesystem_usage(container_id: str, executor: ThreadPoolExecutor) -> dict[str, float]:
     """Retrieve filesystem usage inside the container."""
     if not ENABLE_FILESYSTEM:
         return {"filesystem_usage_gb": 0, "filesystem_total_gb": 0, "filesystem_free_gb": 0}
@@ -199,7 +199,7 @@ async def get_container_process_count(container_id: str, executor: ThreadPoolExe
         return len(lines)
     return 0
 
-async def collect_metrics_for_container(container_id: str, executor: ThreadPoolExecutor) -> Tuple[str, Dict[str, Any]]:
+async def collect_metrics_for_container(container_id: str, executor: ThreadPoolExecutor) -> tuple[str, dict[str, Any]]:
     """Collect all metrics for a given container."""
     logger.info(f"Collecting metrics for container: {container_id}")
 
@@ -251,7 +251,7 @@ async def collect_and_export_metrics():
         for container_id in containers:
             result = await collect_metrics_for_container(container_id, executor)
             results.append(result)
-    
+
     executor.shutdown(wait=True)  # Properly shutdown the executor after usage
 
     # Ensure results are processed correctly
@@ -283,13 +283,13 @@ async def collect_and_export_metrics():
     # Write the updated data to the file
     await write_metrics_to_file(EXPORT_FILE, existing_data)
 
-async def load_existing_data(file_path: str) -> List[Dict[str, Any]]:
+async def load_existing_data(file_path: str) -> list[dict[str, Any]]:
     """Load existing data from the JSON file."""
     if not os.path.exists(file_path):
         return []
 
     try:
-        async with aiofiles.open(file_path, mode='r') as json_file:
+        async with aiofiles.open(file_path) as json_file:
             content = await json_file.read()
             data = json.loads(content)
             if not isinstance(data, list):
@@ -297,11 +297,11 @@ async def load_existing_data(file_path: str) -> List[Dict[str, Any]]:
                 return []
             logger.debug(f"Loaded existing metrics from {file_path}.")
             return data
-    except (IOError, json.JSONDecodeError) as e:
+    except (OSError, json.JSONDecodeError) as e:
         logger.warning(f"Failed to read existing data from {file_path}: {e}")
         return []
 
-async def write_metrics_to_file(file_path: str, data: List[Dict[str, Any]]):
+async def write_metrics_to_file(file_path: str, data: list[dict[str, Any]]):
     """
     Write metrics data to a JSON file asynchronously with size limiting.
     Keeps only the most recent MAX_METRICS_ENTRIES to prevent unbounded growth.
@@ -311,14 +311,14 @@ async def write_metrics_to_file(file_path: str, data: List[Dict[str, Any]]):
         removed = len(data) - MAX_METRICS_ENTRIES
         data = data[-MAX_METRICS_ENTRIES:]
         logger.info(f"Rotated metrics: removed {removed} old entries, keeping last {MAX_METRICS_ENTRIES}")
-    
+
     temp_file = f"{file_path}.tmp"
     try:
         async with aiofiles.open(temp_file, mode='w') as json_file:
             await json_file.write(json.dumps(data, indent=4, sort_keys=True))
         os.replace(temp_file, file_path)
         logger.info(f"Metrics successfully exported to {file_path} ({len(data)} entries)")
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Failed to write metrics to {file_path}: {e}")
         if os.path.exists(temp_file):
             os.remove(temp_file)

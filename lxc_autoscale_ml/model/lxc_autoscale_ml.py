@@ -27,20 +27,20 @@ class CircuitBreaker:
         self.timeout = timeout  # seconds
         self.failures = defaultdict(int)
         self.opened_at = defaultdict(lambda: None)
-    
+
     def is_open(self, key):
         """Check if circuit is open (blocking requests)."""
         if self.opened_at[key] is None:
             return False
-        
+
         # Check if timeout has passed
         if datetime.now() - self.opened_at[key] > timedelta(seconds=self.timeout):
             logging.info(f"Circuit breaker for {key} timeout expired, attempting reset")
             self.reset(key)
             return False
-        
+
         return True
-    
+
     def record_failure(self, key):
         """Record a failure and open circuit if threshold reached."""
         self.failures[key] += 1
@@ -50,13 +50,13 @@ class CircuitBreaker:
                 f"Circuit breaker opened for {key} after {self.failures[key]} failures. "
                 f"Will retry in {self.timeout}s"
             )
-    
+
     def record_success(self, key):
         """Record a success and reset circuit."""
         if self.failures[key] > 0:
             logging.info(f"Circuit breaker for {key} reset after successful request")
         self.reset(key)
-    
+
     def reset(self, key):
         """Reset circuit breaker state."""
         self.failures[key] = 0
@@ -72,7 +72,7 @@ def main():
 
     logging.info("Starting the LXC auto-scaling script...")
 
-    create_lock_file(config.get("lock_file", "/tmp/lxc_autoscale_ml.lock"))
+    create_lock_file(config.get("lock_file", "/run/lxc_autoscale_ml.lock"))
 
     try:
         while True:
@@ -94,11 +94,11 @@ def main():
 
             # Get all unique container IDs
             container_ids = [str(cid) for cid in df["container_id"].unique()]
-            
+
             # Batch fetch all container configs in parallel (10x faster than sequential!)
             logging.info(f"Batch fetching configs for {len(container_ids)} containers...")
             batch_start = time.time()
-            
+
             all_configs = fetch_container_configs_sync(
                 container_ids,
                 config["api"]["api_url"],
@@ -106,7 +106,7 @@ def main():
                 timeout=5,
                 max_concurrent=10
             )
-            
+
             batch_duration = time.time() - batch_start
             successful_fetches = sum(1 for c in all_configs.values() if c is not None)
             logging.info(
@@ -154,7 +154,7 @@ def main():
     except Exception as e:
         logging.error(f"An error occurred: {e}")
     finally:
-        remove_lock_file(config.get("lock_file", "/tmp/lxc_autoscale_ml.lock"))
+        remove_lock_file(config.get("lock_file", "/run/lxc_autoscale_ml.lock"))
         logging.info("Script execution completed.")
 
 if __name__ == "__main__":

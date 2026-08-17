@@ -1,7 +1,7 @@
-# This Python script generates fake metrics data for containers. 
-# It can simulate various metrics such as CPU usage, memory usage, network activity, etc., with options to introduce randomness and spikes in the data. 
+# This Python script generates fake metrics data for containers.
+# It can simulate various metrics such as CPU usage, memory usage, network activity, etc., with options to introduce randomness and spikes in the data.
 # The script supports generating data for multiple containers over a specified period and saving the output in JSON format.
-# Example use: 
+# Example use:
 # python3 generate_metrics.py --num-containers 5 --num-entries 100000 --interval-seconds 60 --randomness 1.0 --spike-likelihood 0.2 --spike-magnitude 1.0 --output-file fake_metrics.json
 
 
@@ -42,7 +42,7 @@ def generate_metrics(container_id, base_time, interval_seconds, randomness_facto
     filesystem_free_gb = base_metrics["filesystem_free_gb"]
 
     # Apply spikes based on the spike likelihood
-    if random.random() < spike_likelihood:
+    if random.random() < spike_likelihood:  # noqa: S311 - synthetic sample data, not a security context
         cpu_usage_percent *= (1 + spike_magnitude)
         memory_usage_mb *= (1 + spike_magnitude)
         io_reads *= (1 + spike_magnitude)

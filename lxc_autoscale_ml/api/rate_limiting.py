@@ -11,7 +11,7 @@ _rate_limit_lock = threading.Lock()
 def rate_limit(f):
     """
     Rate limiting decorator with smart exemptions.
-    
+
     Features:
     - Exempts localhost/127.0.0.1 (internal ML service)
     - Per-IP tracking with sliding window
@@ -24,11 +24,11 @@ def rate_limit(f):
         client_ip = request.remote_addr
         # Use .get with a default to avoid KeyError if the config is missing
         rate_limiting_config = current_app.config.get('RATE_LIMITING', {})
-        
+
         # Exempt localhost - ML service makes many requests
         if client_ip in ['127.0.0.1', '::1', 'localhost']:
             return f(*args, **kwargs)
-        
+
         # Check if rate limiting is disabled (default to enabled when config missing)
         if not rate_limiting_config.get('enabled', True):
             return f(*args, **kwargs)
@@ -36,7 +36,7 @@ def rate_limit(f):
         current_time = time.time()
         time_window = rate_limiting_config.get('time_window_seconds', 60)
         max_requests = rate_limiting_config.get('max_requests_per_minute', 60)
-        
+
         # Only the bookkeeping is serialised. The wrapped view runs outside the
         # lock: scaling calls shell out to `pct` and can take seconds, and
         # holding the lock across them would serialise the whole API.

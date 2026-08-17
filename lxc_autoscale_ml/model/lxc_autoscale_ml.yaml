@@ -22,7 +22,7 @@ log_file: "/var/log/lxc_autoscale_ml.log"  # Path to the log file
 log_level: "DEBUG"  # Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 
 # Lock File Configuration
-lock_file: "/tmp/lxc_autoscale_ml.lock"  # Path to the lock file to prevent multiple instances
+lock_file: "/run/lxc_autoscale_ml.lock"  # Path to the lock file to prevent multiple instances
 
 # Data File Configuration
 data_file: "/var/log/lxc_metrics.json"  # Path to the metrics file containing container data produced by LXC AutoScale API

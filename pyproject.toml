@@ -1,0 +1,33 @@
+# The project is deployed as loose scripts rather than installed as a package,
+# so this file only carries tool configuration.
+
+[tool.ruff]
+target-version = "py39"
+line-length = 120
+exclude = ["docs/node_modules", "docs/.vitepress"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "W",    # pycodestyle warnings
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "S",    # flake8-bandit
+]
+ignore = [
+    "E501",    # line length is handled by the formatter, not enforced
+    "S101",    # assert is expected in the test suite
+    "UP032",   # str.format is used deliberately for the HTML template
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Proxmox management inherently shells out to pct/pvesh/pvecm.
+"lxc_autoscale_ml/api/lxc_management.py" = ["S603", "S607"]
+"lxc_autoscale_ml/api/resource_checking.py" = ["S603", "S607"]
+"lxc_autoscale_ml/monitor/lxc_monitor.py" = ["S603", "S607"]
+"tests/*" = ["S105", "S106"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"

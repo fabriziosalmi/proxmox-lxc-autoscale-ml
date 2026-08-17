@@ -353,4 +353,12 @@ def _record_request_metrics(response):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Defaults preserve the historical behaviour. Bind to 127.0.0.1 in the
+    # config when the ML service runs on the same node as the API, which is the
+    # standard layout -- the API executes pct commands as root and has no
+    # transport security of its own.
+    server_config = app.config.get('SERVER', {})
+    app.run(
+        host=server_config.get('host', '0.0.0.0'),  # noqa: S104 - configurable, see above
+        port=server_config.get('port', 5000),
+    )

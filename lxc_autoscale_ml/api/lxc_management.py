@@ -13,19 +13,18 @@ class LXCManager:
             logging.info(f"Running command: {command}")
             result = subprocess.run(
                 shlex.split(command),
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
                 timeout=self.timeout,
-                universal_newlines=True
+                text=True
             )
             result.check_returncode()
             return result.stdout.strip()
         except subprocess.CalledProcessError as e:
             logging.error(f"Command failed: {e.stderr}")
-            raise Exception(f"Command failed: {e.stderr}")
-        except subprocess.TimeoutExpired:
+            raise RuntimeError(f"Command failed: {e.stderr}") from e
+        except subprocess.TimeoutExpired as e:
             logging.error("Command timed out")
-            raise Exception("Command timed out")
+            raise RuntimeError(f"Command timed out after {self.timeout}s") from e
 
 
     def stop_container(self, vm_id):
@@ -49,7 +48,7 @@ class LXCManager:
     def migrate_container(self, vm_id, target_node):
         # Check for non-migratable snapshots or create a new one for migration
         snapshot_name = self.create_temporary_snapshot(vm_id)
-        
+
         try:
             command = f"pct migrate {vm_id} {target_node}"
             self._run_command(command)
@@ -73,8 +72,8 @@ class LXCManager:
             if line.startswith("rootfs:"):
                 current_size = line.split(",")[1].replace("size=", "").replace("G", "").strip()
                 return int(current_size)
-        raise Exception("Failed to retrieve current disk size")
-    
+        raise RuntimeError(f"Failed to retrieve the current disk size of container {vm_id}")
+
     def get_current_resources(self, vm_id):
         """Retrieve current CPU cores and memory (MB) for a container"""
         command = f"pct config {vm_id}"
@@ -87,7 +86,7 @@ class LXCManager:
             elif line.startswith("memory:"):
                 memory = int(line.split(":")[1].strip())
         if cores is None or memory is None:
-            raise Exception(f"Failed to retrieve current resources for container {vm_id}")
+            raise RuntimeError(f"Failed to retrieve current resources for container {vm_id}")
         return cores, memory
 
     def resize_storage(self, vm_id, disk_size):

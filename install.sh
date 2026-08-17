@@ -1,4 +1,8 @@
 #!/bin/bash
+#
+# LXC AutoScale ML installer.
+
+set -euo pipefail
 
 # Log file
 LOGFILE="lxc_autoscale_ml_installer.log"
@@ -22,7 +26,14 @@ log() {
     local emoji="$3"
     local timestamp
     timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo -e "${timestamp} [${level}] ${emoji} ${message}" | tee -a "$LOGFILE"
+    local colour
+    case "$level" in
+        "SUCCESS") colour="$GREEN" ;;
+        "ERROR")   colour="$RED" ;;
+        "WARNING") colour="$YELLOW" ;;
+        *)         colour="$BLUE" ;;
+    esac
+    echo -e "${timestamp} [${colour}${level}${RESET}] ${emoji} ${message}" | tee -a "$LOGFILE"
 }
 
 # ASCII Art Header
@@ -97,8 +108,8 @@ install_lxc_autoscale_ml() {
     log "INFO" "Installing LXC AutoScale ML..." "$INFO"
 
     # Disable and stop services if running
-    systemctl disable lxc_autoscale_ml.service lxc_autoscale_api.service lxc_monitor.service 2>/dev/null
-    systemctl stop lxc_autoscale_ml.service lxc_autoscale_api.service lxc_monitor.service 2>/dev/null
+    systemctl disable lxc_autoscale_ml.service lxc_autoscale_api.service lxc_monitor.service 2>/dev/null || true
+    systemctl stop lxc_autoscale_ml.service lxc_autoscale_api.service lxc_monitor.service 2>/dev/null || true
 
     # Reload systemd
     systemctl daemon-reload
@@ -133,6 +144,24 @@ install_lxc_autoscale_ml() {
     setup_service "lxc_autoscale_ml.service"
 }
 
+# Install a config file without overwriting an existing one. On an upgrade the
+# shipped defaults land next to the current file as <name>.yaml.new so local
+# edits survive; previously every upgrade silently replaced them.
+install_config() {
+    local source_file="$1"
+    local name
+    name=$(basename "$source_file")
+    local target="/etc/lxc_autoscale_ml/${name}"
+
+    if [[ -e "$target" ]]; then
+        mv "$source_file" "${target}.new"
+        log "WARNING" "${target} already exists; shipped defaults written to ${target}.new" "$WARNING"
+    else
+        mv "$source_file" "$target"
+        log "SUCCESS" "Installed ${target}" "$CHECKMARK"
+    fi
+}
+
 # Function to move files to their respective directories
 move_files() {
     local source_dir="$1"
@@ -140,11 +169,12 @@ move_files() {
     log "INFO" "Moving files to their respective directories..." "$INFO"
 
     mv "$source_dir/lxc_autoscale_ml/api/"*.py /usr/local/bin/lxc_autoscale_api/
-    mv "$source_dir/lxc_autoscale_ml/api/lxc_autoscale_api.yaml" /etc/lxc_autoscale_ml/
     mv "$source_dir/lxc_autoscale_ml/monitor/lxc_monitor.py" /usr/local/bin/
-    mv "$source_dir/lxc_autoscale_ml/monitor/lxc_monitor.yaml" /etc/lxc_autoscale_ml/
     mv "$source_dir/lxc_autoscale_ml/model/"*.py /usr/local/bin/lxc_autoscale_ml/
-    mv "$source_dir/lxc_autoscale_ml/model/lxc_autoscale_ml.yaml" /etc/lxc_autoscale_ml/
+
+    install_config "$source_dir/lxc_autoscale_ml/api/lxc_autoscale_api.yaml"
+    install_config "$source_dir/lxc_autoscale_ml/monitor/lxc_monitor.yaml"
+    install_config "$source_dir/lxc_autoscale_ml/model/lxc_autoscale_ml.yaml"
     mv "$source_dir/lxc_autoscale_ml/api/lxc_autoscale_api.service" /etc/systemd/system/
     mv "$source_dir/lxc_autoscale_ml/monitor/lxc_monitor.service" /etc/systemd/system/
     mv "$source_dir/lxc_autoscale_ml/model/lxc_autoscale_ml.service" /etc/systemd/system/
@@ -161,7 +191,7 @@ setup_service() {
         log "INFO" "${CHECKMARK} Service $service_name started successfully!" "$CHECKMARK"
     else
         log "ERROR" "${CROSSMARK} Failed to start service $service_name." "$CROSSMARK"
-        systemctl status "$service_name" --no-pager
+        systemctl status "$service_name" --no-pager || true
     fi
 }
 

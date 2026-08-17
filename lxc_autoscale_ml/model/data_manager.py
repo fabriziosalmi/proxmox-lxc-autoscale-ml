@@ -6,7 +6,7 @@ from sklearn.preprocessing import StandardScaler
 
 def load_data(file_path):
     try:
-        with open(file_path, 'r') as f:
+        with open(file_path) as f:
             data = json.load(f)
         logging.info(f"Data loaded successfully from {file_path}.")
     except FileNotFoundError:
@@ -74,7 +74,7 @@ def preprocess_data(df, config):
     try:
         spike_threshold = config.get('spike_detection', {}).get('spike_threshold', 2)
         rolling_window_size = config.get('rolling_window', 5)
-        
+
         # Derived metrics
         df['cpu_per_process'] = df['cpu_usage_percent'] / df['process_count']
         df['memory_per_process'] = df['memory_usage_mb'] / df['process_count']
@@ -87,7 +87,7 @@ def preprocess_data(df, config):
         except Exception as e:
             logging.error(f"Error calculating 'time_diff': {e}")
             df['time_diff'] = 0  # Default to 0 in case of errors
-        
+
         # Rolling statistics for spike detection and trend analysis
         df['rolling_mean_cpu'] = df.groupby('container_id')['cpu_usage_percent'].transform(
             lambda x: x.rolling(window=rolling_window_size, min_periods=1).mean())

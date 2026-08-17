@@ -17,7 +17,7 @@ def setup_signal_handlers(cleanup_function=None):
         """
         signal_name = signal.Signals(signum).name  # Get a more descriptive signal name
         logging.info(f"Received {signal_name} ({signum}). Exiting gracefully.")
-        
+
         # Call the cleanup function if provided
         if cleanup_function:
             logging.info("Performing cleanup before exiting...")
@@ -25,9 +25,9 @@ def setup_signal_handlers(cleanup_function=None):
                 cleanup_function()
             except Exception as e:
                 logging.error(f"Error during cleanup: {e}")
-        
+
         sys.exit(0)
-    
+
     # Register signal handlers
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)

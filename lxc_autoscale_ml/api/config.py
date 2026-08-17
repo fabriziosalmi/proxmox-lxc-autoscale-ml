@@ -3,7 +3,7 @@ import yaml
 from flask import Flask
 
 def load_config(config_file='/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml'):
-    with open(config_file, 'r') as file:
+    with open(config_file) as file:
         config = yaml.safe_load(file)
     return config
 
@@ -23,6 +23,9 @@ def create_app(config=None):
 
     # Load authentication configuration
     app.config['AUTHENTICATION'] = config.get('authentication', {'enabled': False})
+
+    # Listen address. Defaults match the historical hard-coded values.
+    app.config['SERVER'] = config.get('server', {})
 
     # Flask settings
     app.secret_key = os.urandom(24)
