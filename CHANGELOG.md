@@ -144,12 +144,18 @@ next interval, and one bad container no longer abandons the rest of the fleet.
   rate limiting, configuration, the `pct` wrapper, the data pipeline, the
   confidence mapping, the scaling loop, the metrics collector and the lock. The
   project had none.
-- **CI**: ruff, pytest on Python 3.9/3.11/3.12, a dependency-resolution job and
-  shellcheck over the install scripts.
+- **CI**: ruff, pytest on Python 3.10/3.11/3.12, a dependency-resolution job
+  and shellcheck over the install scripts.
 - **Dependabot configuration** for pip, the docs npm tree and workflow actions.
 
 ### Changed
 
+- **The supported Python range is now stated: 3.10 to 3.12.** The floor comes
+  from the pinned `requests`, which requires 3.10, so the previously documented
+  "Python 3.x" was never accurate. The ceiling comes from the pinned `numpy`,
+  `pandas` and `scikit-learn`, which have no 3.13 wheels -- meaning the ML
+  component will not install on Proxmox VE 9 (Debian 13) until those pins are
+  raised. The API and the monitor are unaffected.
 - The API index page is generated from the route table and no longer loads
   Bootstrap and jQuery from public CDNs.
 - `model/scaling.py` is renamed `model/scaling_decisions.py`: it collided with

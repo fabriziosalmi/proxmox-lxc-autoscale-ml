@@ -2,7 +2,6 @@
 import asyncio
 import aiohttp
 import logging
-from typing import Optional
 
 class AsyncAPIClient:
     """
@@ -29,7 +28,7 @@ class AsyncAPIClient:
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
-        self._session: Optional[aiohttp.ClientSession] = None
+        self._session: aiohttp.ClientSession | None = None
 
     async def __aenter__(self):
         """Context manager entry - create session."""
@@ -56,7 +55,7 @@ class AsyncAPIClient:
         container_id: str,
         retry_count: int = 3,
         circuit_breaker = None
-    ) -> tuple[str, Optional[dict]]:
+    ) -> tuple[str, dict | None]:
         """
         Fetch configuration for a single container with retry logic.
 
@@ -150,7 +149,7 @@ class AsyncAPIClient:
         self,
         container_ids: list[str],
         circuit_breaker = None
-    ) -> dict[str, Optional[dict]]:
+    ) -> dict[str, dict | None]:
         """
         Fetch configurations for multiple containers concurrently.
 
@@ -199,7 +198,7 @@ async def fetch_all_container_configs(
     circuit_breaker = None,
     timeout: int = 5,
     max_concurrent: int = 10
-) -> dict[str, Optional[dict]]:
+) -> dict[str, dict | None]:
     """
     Convenience function to fetch all container configs with proper session management.
 
@@ -223,7 +222,7 @@ def fetch_container_configs_sync(
     circuit_breaker = None,
     timeout: int = 5,
     max_concurrent: int = 10
-) -> dict[str, Optional[dict]]:
+) -> dict[str, dict | None]:
     """
     Synchronous wrapper for async batch fetch - for use in sync code.
 

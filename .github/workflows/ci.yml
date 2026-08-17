@@ -31,9 +31,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.11 is what Proxmox VE 8 (Debian 12) ships. The upper bound is set
-        # by the pinned numpy/pandas/scikit-learn, which have no 3.13 wheels.
-        python-version: ['3.9', '3.11', '3.12']
+        # 3.11 is what Proxmox VE 8 (Debian 12) ships. The floor is set by the
+        # pinned requests, which requires 3.10; the ceiling by the pinned
+        # numpy/pandas/scikit-learn, which have no 3.13 wheels.
+        python-version: ['3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

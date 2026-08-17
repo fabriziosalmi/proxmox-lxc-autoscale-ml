@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from subprocess import CalledProcessError, check_output
-from typing import Any, Optional
+from typing import Any
 
 import aiofiles
 import psutil
@@ -118,7 +118,7 @@ def get_running_lxc_containers() -> list[str]:
     return containers
 
 
-def run_command(command: list[str]) -> Optional[str]:
+def run_command(command: list[str]) -> str | None:
     """Run a command and return its stdout, or None if it failed."""
     try:
         return check_output(command, text=True)  # noqa: S603
@@ -146,7 +146,7 @@ async def retry_on_failure(func: Any, *args, **kwargs) -> Any:
                 return None
 
 
-async def get_container_metric(command: list[str], executor: ThreadPoolExecutor) -> Optional[str]:
+async def get_container_metric(command: list[str], executor: ThreadPoolExecutor) -> str | None:
     """Execute a command asynchronously in a worker thread."""
     return await asyncio.get_running_loop().run_in_executor(executor, run_command, command)
 
@@ -412,7 +412,7 @@ async def collect_and_export_metrics():
     finally:
         executor.shutdown(wait=True)
 
-    for container_id, result in zip(containers, results):
+    for container_id, result in zip(containers, results, strict=True):
         if isinstance(result, BaseException):
             logger.error(f"Failed to collect metrics for container {container_id}: {result}")
             continue
