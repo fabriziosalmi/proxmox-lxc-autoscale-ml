@@ -5,7 +5,34 @@ All notable changes to the LXC AutoScale ML project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.3.0] - 2026-08-17
+
+### Upgrade notes
+
+This release is not a drop-in replacement. Two changes need action:
+
+1. **The API now runs under gunicorn.** The systemd unit no longer starts
+   Flask's development server, so the `gunicorn` package must be present or the
+   service will not come up. `install.sh` installs it; a manual upgrade needs
+   `apt install gunicorn`.
+2. **Python 3.10 to 3.12 is required.** The pinned `requests` needs 3.10 and the
+   pinned `numpy`/`pandas`/`scikit-learn` have no 3.13 wheels. Proxmox VE 8
+   (Debian 12, Python 3.11) is unaffected; Proxmox VE 9 (Debian 13, Python 3.13)
+   cannot run the ML component until those pins are raised.
+
+Smaller things worth knowing before upgrading:
+
+- `/health/check` answers **503** when `pct` or the node configuration is
+  broken. It previously always answered 200, so monitoring that treated it as a
+  liveness probe will start reporting real failures.
+- Model-prediction, circuit-breaker and container-usage series were **removed**
+  from `/metrics`. They were never populated, so any dashboard panel using them
+  was already empty.
+- `install.sh` no longer overwrites an existing configuration; shipped defaults
+  land next to it as `<name>.yaml.new`. Review those for the new `server` and
+  `gunicorn` keys.
+- The HTTP API itself is backward compatible: `vm_id` and `/resource/vm/*` keep
+  working alongside the preferred `lxc_id` and `/resource/lxc/*`.
 
 ### Fixed — the autoscaler could not work at all
 
