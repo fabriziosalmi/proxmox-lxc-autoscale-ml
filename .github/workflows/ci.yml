@@ -31,18 +31,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.11 is what Proxmox VE 8 (Debian 12) ships.
-        python-version: ['3.9', '3.11', '3.12', '3.13']
+        # 3.11 is what Proxmox VE 8 (Debian 12) ships. The upper bound is set
+        # by the pinned numpy/pandas/scikit-learn, which have no 3.13 wheels.
+        python-version: ['3.9', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install test dependencies
-        # The tests stub out every Proxmox call, so pandas/scikit-learn are not
-        # needed. prometheus-client is included so the metrics path is covered.
-        run: pip install Flask==3.1.3 PyYAML==6.0.1 requests prometheus-client==0.19.0 pytest==8.4.2
+      - name: Install dependencies
+        # The full runtime set: the tests exercise the data pipeline and the
+        # metrics collector, not just the API.
+        run: pip install -r requirements-dev.txt
       - name: Run tests
         run: pytest
 
