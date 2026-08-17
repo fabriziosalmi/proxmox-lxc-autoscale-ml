@@ -189,7 +189,9 @@ next interval, and one bad container no longer abandons the rest of the fleet.
   `api/scaling.py` in a flat module namespace, which is why the ML side could
   not be tested. Both are installed into separate directories, so deployments
   are unaffected.
-- Flask 3.0.0 → 3.1.3.
+- Flask 3.0.0 → 3.1.3, aiohttp 3.14.1 → 3.14.3 (GHSA-cq5v-8q36-5273, an
+  out-of-bounds heap read in the C HTTP response parser), and the docs
+  lockfile refreshed for the postcss advisories.
 - The configuration reference now matches the shipped YAML.
 
 ## [1.2.0] - 2025-12-24
