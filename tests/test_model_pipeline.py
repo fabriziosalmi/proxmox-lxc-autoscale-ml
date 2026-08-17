@@ -1,6 +1,7 @@
 """Tests for the ML side: data preparation, prediction and the scaling loop."""
 import json
 import logging
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -24,11 +25,19 @@ BASE_CONFIG = {
 }
 
 
-def make_snapshot(container_ids, index, **overrides):
+def make_snapshot(container_ids, index, cycles=8, **overrides):
+    """One collection cycle.
+
+    Timestamps are anchored to *now* rather than a fixed date: the model
+    refuses to scale on metrics older than `max_metrics_age_seconds`, so a
+    fixture pinned to 2026-01-01 exercises the staleness path instead of the
+    scaling path.
+    """
+    stamp = datetime.now() - timedelta(seconds=60 * (cycles - 1 - index))
     snapshot = {}
     for container_id in container_ids:
         metrics = {
-            "timestamp": f"2026-01-01T00:{index:02d}:00",
+            "timestamp": stamp.isoformat(),
             "cpu_usage_percent": 40.0 + index,
             "memory_usage_mb": 900.0 + index * 10,
             "swap_usage_mb": 0,
@@ -50,7 +59,8 @@ def make_snapshot(container_ids, index, **overrides):
 def metrics_file(tmp_path):
     def _write(container_ids=("104", "105"), cycles=8, **overrides):
         path = tmp_path / "lxc_metrics.json"
-        data = [make_snapshot(container_ids, i, **overrides) for i in range(cycles)]
+        data = [make_snapshot(container_ids, i, cycles=cycles, **overrides)
+                for i in range(cycles)]
         path.write_text(json.dumps(data))
         return str(path)
     return _write
@@ -59,10 +69,19 @@ def metrics_file(tmp_path):
 class TestLoadData:
     def test_container_ids_stay_strings(self, metrics_file):
         """The scaling loop matches on these; a silent int/str mismatch
-        matched no rows and raised IndexError on the first container."""
+        matched no rows and raised IndexError on the first container.
+
+        Asserts the contract -- the values are strings and selecting by a
+        string id matches rows -- rather than the dtype. pandas 3 gives a
+        string column `StringDtype` instead of `object`, which changes the
+        dtype without changing any behaviour this code depends on.
+        """
         df = load_data(metrics_file())
-        assert df["container_id"].dtype == object
         assert set(df["container_id"]) == {"104", "105"}
+        assert all(isinstance(v, str) for v in df["container_id"])
+        assert [str(c) for c in df["container_id"].unique()] == ["104", "105"]
+        # The selection the scaling loop performs.
+        assert not df[df["container_id"] == "104"].empty
 
     def test_summary_entry_is_skipped(self, metrics_file):
         df = load_data(metrics_file())
@@ -288,31 +307,70 @@ class TestCircuitBreakerConfig:
 
 
 class TestScalingDecisions:
+    def test_scale_up_moves_one_step(self):
+        from scaling_decisions import determine_scaling_action
+
+        metrics = pd.Series({
+            "cpu_usage_percent": 99.0, "memory_usage_mb": 15000.0,
+            "current_cores": 4, "current_ram_mb": 8192,
+        })
+        cpu_action, ram_action, new_cores, new_ram = determine_scaling_action(
+            metrics, -1, 90.0, BASE_CONFIG)
+        assert (cpu_action, new_cores) == ("Scale Up", 5)
+        assert (ram_action, new_ram) == ("Scale Up", 8704)
+
+    def test_scale_down_moves_one_step(self):
+        from scaling_decisions import determine_scaling_action
+
+        metrics = pd.Series({
+            "cpu_usage_percent": 1.0, "memory_usage_mb": 10.0,
+            "current_cores": 4, "current_ram_mb": 8192,
+        })
+        cpu_action, ram_action, new_cores, new_ram = determine_scaling_action(
+            metrics, 1, 90.0, BASE_CONFIG)
+        assert (cpu_action, new_cores) == ("Scale Down", 3)
+        assert (ram_action, new_ram) == ("Scale Down", 7680)
+
     def test_scale_up_is_capped_at_the_maximum(self):
         from scaling_decisions import determine_scaling_action
 
         metrics = pd.Series({
             "cpu_usage_percent": 99.0, "memory_usage_mb": 15000.0,
-            "current_cores": 8, "current_ram_mb": 16384,
+            "current_cores": 7, "current_ram_mb": 16000,
         })
         cpu_action, ram_action, new_cores, new_ram = determine_scaling_action(
             metrics, -1, 90.0, BASE_CONFIG)
-        assert cpu_action == "Scale Up"
         assert new_cores == BASE_CONFIG["scaling"]["max_cpu_cores"]
         assert new_ram == BASE_CONFIG["scaling"]["max_ram_mb"]
 
-    def test_scale_down_is_floored_at_the_minimum(self):
+    def test_a_container_already_at_the_ceiling_reports_no_action(self):
+        """It used to report "Scale Up" with new_cores == current_cores, so the
+        loop issued a no-op root `pct set` every interval and the scaling
+        counter stopped meaning anything."""
+        from scaling_decisions import determine_scaling_action
+
+        metrics = pd.Series({
+            "cpu_usage_percent": 99.0, "memory_usage_mb": 15000.0,
+            "current_cores": BASE_CONFIG["scaling"]["max_cpu_cores"],
+            "current_ram_mb": BASE_CONFIG["scaling"]["max_ram_mb"],
+        })
+        cpu_action, ram_action, new_cores, new_ram = determine_scaling_action(
+            metrics, -1, 90.0, BASE_CONFIG)
+        assert (cpu_action, new_cores) == ("No Scaling", None)
+        assert (ram_action, new_ram) == ("No Scaling", None)
+
+    def test_a_container_already_at_the_floor_reports_no_action(self):
         from scaling_decisions import determine_scaling_action
 
         metrics = pd.Series({
             "cpu_usage_percent": 1.0, "memory_usage_mb": 10.0,
-            "current_cores": 1, "current_ram_mb": 512,
+            "current_cores": BASE_CONFIG["scaling"]["min_cpu_cores"],
+            "current_ram_mb": BASE_CONFIG["scaling"]["min_ram_mb"],
         })
         cpu_action, ram_action, new_cores, new_ram = determine_scaling_action(
             metrics, 1, 90.0, BASE_CONFIG)
-        assert cpu_action == "Scale Down"
-        assert new_cores == BASE_CONFIG["scaling"]["min_cpu_cores"]
-        assert new_ram == BASE_CONFIG["scaling"]["min_ram_mb"]
+        assert (cpu_action, new_cores) == ("No Scaling", None)
+        assert (ram_action, new_ram) == ("No Scaling", None)
 
     def test_zero_ram_allocation_does_not_divide_by_zero(self):
         from scaling_decisions import determine_scaling_action
@@ -324,3 +382,191 @@ class TestScalingDecisions:
         cpu_action, ram_action, _, _ = determine_scaling_action(
             metrics, 1, 90.0, BASE_CONFIG)
         assert ram_action in ("Scale Up", "Scale Down", "No Scaling")
+
+
+class TestScalingDirectionEndToEnd:
+    """The regression that two repair rounds walked past.
+
+    `preprocess_data` used to standard-scale `cpu_usage_percent` and
+    `memory_usage_mb`, which `determine_scaling_action` then compared against
+    percentage thresholds. A z-score never exceeds 75 and is almost always
+    below 30, so every container was scaled DOWN on both axes every cycle: a
+    container at 99% CPU produced the same decision as one at 3%.
+
+    The existing tests asserted only that *something* was applied. These assert
+    the direction and the target value, driving the real pipeline from the
+    metrics file all the way to the call `apply_scaling` would make.
+    """
+
+    @pytest.fixture
+    def cycle(self, monkeypatch, tmp_path):
+        import lxc_autoscale_ml as orch
+
+        applied = []
+        monkeypatch.setattr(
+            orch, "apply_scaling",
+            lambda cid, cores, ram, config: applied.append((cid, cores, ram)))
+        monkeypatch.setattr(
+            orch, "fetch_container_configs_sync",
+            lambda ids, url, **kw: {cid: {"cores": 4, "memory_mb": 8192} for cid in ids})
+
+        def _run(cpu_series, mem_series, **config_overrides):
+            cycles = len(cpu_series)
+            data = []
+            for i, (cpu, mem) in enumerate(zip(cpu_series, mem_series, strict=True)):
+                snap = make_snapshot(("104",), i, cycles=cycles,
+                                     cpu_usage_percent=cpu, memory_usage_mb=mem)
+                data.append(snap)
+            path = tmp_path / "metrics.json"
+            path.write_text(json.dumps(data))
+            config = {**BASE_CONFIG, "data_file": str(path), **config_overrides}
+            applied.clear()
+            orch.run_cycle(config)
+            return list(applied)
+
+        return _run
+
+    def test_a_saturated_container_scales_up(self, cycle):
+        # 8192 MB allocated, ~7900 MB used -> 96%.
+        applied = cycle([92, 95, 97, 99, 93, 96, 98, 99],
+                        [7600, 7700, 7800, 7900, 7650, 7750, 7850, 7900])
+        assert applied == [("104", 5, 8704)], (
+            "a container at 99% CPU and 96% RAM must gain a step of each"
+        )
+
+    def test_an_idle_container_scales_down(self, cycle):
+        applied = cycle([4, 6, 5, 7, 3, 5, 6, 5],
+                        [900, 1000, 950, 1050, 880, 940, 1000, 980])
+        assert applied == [("104", 3, 7680)]
+
+    def test_a_steady_container_is_left_alone(self, cycle):
+        applied = cycle([48, 52, 50, 49, 51, 50, 52, 50],
+                        [4000, 4100, 4050, 4090, 4020, 4060, 4100, 4096])
+        assert applied == []
+
+    def test_busy_and_idle_do_not_produce_the_same_decision(self, cycle):
+        """The single clearest symptom of the inversion."""
+        busy = cycle([92, 95, 97, 99, 93, 96, 98, 99],
+                     [7600, 7700, 7800, 7900, 7650, 7750, 7850, 7900])
+        idle = cycle([4, 6, 5, 7, 3, 5, 6, 5],
+                     [900, 1000, 950, 1050, 880, 940, 1000, 980])
+        assert busy != idle, "load has no effect on the scaling decision"
+
+    def test_thresholds_see_real_units(self, metrics_file):
+        """Guards the root cause directly rather than its symptom."""
+        df = preprocess_data(load_data(metrics_file(cpu_usage_percent=99.0,
+                                                    memory_usage_mb=7900.0)),
+                             BASE_CONFIG)
+        latest = df[df["container_id"] == "104"].iloc[-1]
+        assert latest["cpu_usage_percent"] == pytest.approx(99.0), (
+            "cpu_usage_percent must reach the thresholds as a percentage, "
+            "not as a standardised score"
+        )
+        assert latest["memory_usage_mb"] == pytest.approx(7900.0)
+
+
+class TestUnknownAllocationIsNotGuessed:
+    """A failed config fetch used to substitute the configured minimum as the
+    container's *current* size, then compute an absolute target from that
+    fiction. One cycle collapsed the container to the floor, and the write was
+    self-masking because the next fetch reported the value just imposed."""
+
+    @pytest.fixture
+    def cycle(self, monkeypatch, tmp_path, metrics_file):
+        import lxc_autoscale_ml as orch
+
+        applied = []
+        monkeypatch.setattr(
+            orch, "apply_scaling",
+            lambda cid, cores, ram, config: applied.append((cid, cores, ram)))
+
+        def _run(fetch_result):
+            monkeypatch.setattr(orch, "fetch_container_configs_sync",
+                                lambda ids, url, **kw: {cid: fetch_result for cid in ids})
+            config = {**BASE_CONFIG, "data_file": metrics_file(cpu_usage_percent=99.0)}
+            applied.clear()
+            orch.run_cycle(config)
+            return list(applied)
+
+        return _run
+
+    def test_no_response_skips_the_container(self, cycle):
+        assert cycle(None) == []
+
+    def test_empty_response_skips_the_container(self, cycle):
+        assert cycle({}) == []
+
+    def test_missing_cores_skips_the_container(self, cycle):
+        """`cores` is optional in Proxmox; unset means all host cores."""
+        assert cycle({"memory_mb": 8192}) == []
+
+    def test_missing_memory_skips_the_container(self, cycle):
+        assert cycle({"cores": 4}) == []
+
+    def test_a_complete_response_is_used(self, cycle):
+        # CPU is pinned at 99% and memory sits near 970 MB of the 8192 MB
+        # allocation (~12%), so the correct answer is up on CPU, down on RAM.
+        assert cycle({"cores": 4, "memory_mb": 8192}) == [
+            ("104", 5, 7680), ("105", 5, 7680)]
+
+
+class TestStaleAndDepartedContainers:
+    @pytest.fixture
+    def orchestrator(self, monkeypatch):
+        import lxc_autoscale_ml as orch
+
+        applied = []
+        monkeypatch.setattr(
+            orch, "apply_scaling",
+            lambda cid, cores, ram, config: applied.append((cid, cores, ram)))
+        monkeypatch.setattr(
+            orch, "fetch_container_configs_sync",
+            lambda ids, url, **kw: {cid: {"cores": 4, "memory_mb": 8192} for cid in ids})
+        orch.applied = applied
+        return orch
+
+    def test_only_containers_in_the_newest_snapshot_are_evaluated(
+            self, orchestrator, tmp_path):
+        """The monitor records only running containers, but the file keeps
+        1000 cycles of history. A container stopped hours ago used to be
+        evaluated every cycle -- and with VMID reuse, a new container could be
+        scaled on its predecessor's metrics."""
+        data = [make_snapshot(("104", "105"), i, cycles=8) for i in range(6)]
+        data += [make_snapshot(("104",), i, cycles=8) for i in (6, 7)]  # 105 stopped
+        path = tmp_path / "metrics.json"
+        path.write_text(json.dumps(data))
+
+        config = {**BASE_CONFIG, "data_file": str(path)}
+        seen = []
+        real = orchestrator.evaluate_container
+        orchestrator.evaluate_container = lambda container_id, **kw: (
+            seen.append(container_id), real(container_id=container_id, **kw))[1]
+        try:
+            orchestrator.run_cycle(config)
+        finally:
+            orchestrator.evaluate_container = real
+        assert seen == ["104"], "a departed container must not be evaluated"
+
+    def test_stale_metrics_stop_the_cycle(self, orchestrator, tmp_path):
+        """A wedged monitor used to leave the model scaling on a frozen
+        snapshot forever, ratcheting every container toward a limit."""
+        old = datetime.now() - timedelta(hours=6)
+        data = []
+        for i in range(8):
+            snap = make_snapshot(("104",), i, cycles=8)
+            snap["104"]["timestamp"] = (old + timedelta(seconds=60 * i)).isoformat()
+            data.append(snap)
+        path = tmp_path / "metrics.json"
+        path.write_text(json.dumps(data))
+
+        config = {**BASE_CONFIG, "data_file": str(path)}
+        assert orchestrator.run_cycle(config) is False
+        assert orchestrator.applied == []
+
+    def test_fresh_metrics_are_accepted(self, orchestrator, tmp_path):
+        data = [make_snapshot(("104",), i, cycles=8, cpu_usage_percent=99.0)
+                for i in range(8)]
+        path = tmp_path / "metrics.json"
+        path.write_text(json.dumps(data))
+        config = {**BASE_CONFIG, "data_file": str(path)}
+        assert orchestrator.run_cycle(config) is True

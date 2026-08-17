@@ -84,6 +84,22 @@ def determine_scaling_action(latest_metrics, scaling_decision, confidence, confi
     elif ram_action == "Scale Down":
         new_ram = max(current_ram - ram_step, thresholds["min_ram_mb"])
 
+    # A container already at its floor or ceiling clamps to the value it
+    # already has. Reporting that as an action made the loop issue a no-op
+    # root `pct set` every interval and, worse, made the scaling counter and
+    # the "Successfully scaled" log meaningless -- exactly the signals an
+    # operator reaches for during an incident.
+    if new_cores is not None and new_cores == current_cores:
+        logging.debug(
+            f"CPU already at the {cpu_action.split()[-1].lower()} limit "
+            f"({current_cores} cores); no action.")
+        cpu_action, new_cores = "No Scaling", None
+    if new_ram is not None and new_ram == current_ram:
+        logging.debug(
+            f"RAM already at the {ram_action.split()[-1].lower()} limit "
+            f"({current_ram} MB); no action.")
+        ram_action, new_ram = "No Scaling", None
+
     logging.debug(f"Final scaling actions: CPU -> {cpu_action}, RAM -> {ram_action} | Confidence: {confidence}%")
     return cpu_action, ram_action, new_cores, new_ram
 

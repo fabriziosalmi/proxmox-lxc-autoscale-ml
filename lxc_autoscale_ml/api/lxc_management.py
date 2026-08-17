@@ -139,16 +139,29 @@ class LXCManager:
         )
 
     def get_current_resources(self, lxc_id):
-        """Return (cores, memory_mb) for a container."""
+        """Return (cores, memory_mb) for a container.
+
+        Either may be None. `cores` in particular is OPTIONAL in Proxmox --
+        `pct create` without `--cores` leaves it unset, meaning "all host
+        cores" -- and treating its absence as an error made
+        /resource/lxc/config return 500 for such a container forever, which in
+        turn drove the scaling loop down its guess-the-allocation path.
+        A missing value is a fact about the container, not a failure.
+        """
         config = self.get_config(lxc_id)
-        try:
-            cores = int(config["cores"])
-            memory = int(config["memory"])
-        except (KeyError, ValueError) as e:
-            raise RuntimeError(
-                f"Failed to retrieve current resources for container {lxc_id}: {e}"
-            ) from e
-        return cores, memory
+
+        def optional_int(key):
+            raw = config.get(key)
+            if raw is None:
+                return None
+            try:
+                return int(raw)
+            except ValueError:
+                logging.warning(
+                    f"Container {lxc_id} reports a non-numeric {key}: {raw!r}")
+                return None
+
+        return optional_int("cores"), optional_int("memory")
 
     def resize_storage(self, lxc_id, disk_size):
         """Grow the root filesystem by `disk_size` GB."""

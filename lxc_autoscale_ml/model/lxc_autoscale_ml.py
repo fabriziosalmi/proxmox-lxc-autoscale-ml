@@ -3,6 +3,8 @@
 import logging
 import sys
 import time
+
+import pandas as pd
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -90,6 +92,38 @@ def ignored_container_ids(config):
     return {str(container_id) for container_id in config.get("ignore_lxc") or []}
 
 
+def current_container_ids(df):
+    """Container IDs present in the most recent snapshot.
+
+    The metrics file keeps `max_metrics_entries` cycles of history and the
+    monitor only records running containers, so a container's rows linger long
+    after it stops existing.
+    """
+    latest = df["timestamp"].max()
+    return [str(cid) for cid in df[df["timestamp"] == latest]["container_id"].unique()]
+
+
+def metrics_are_stale(df, config):
+    """True when the newest sample is too old to scale on.
+
+    The monitor can wedge or die while the model keeps running. Without this
+    check the model retrains and scales on a frozen snapshot forever, and
+    because each target is absolute and derived from the live allocation, the
+    allocation ratchets towards a limit on every cycle.
+    """
+    interval = config.get("interval_seconds", 60)
+    max_age = config.get("max_metrics_age_seconds", interval * 3)
+    newest = df["timestamp"].max()
+    age = (pd.Timestamp.now() - newest).total_seconds()
+    if age > max_age:
+        logging.error(
+            f"Newest metrics sample is {age:.0f}s old (limit {max_age:.0f}s). "
+            f"The monitor may be stopped or wedged; refusing to scale on stale data."
+        )
+        return True
+    return False
+
+
 def run_cycle(config, circuit_breaker=None):
     """
     Run one full collection -> prediction -> scaling pass.
@@ -109,6 +143,9 @@ def run_cycle(config, circuit_breaker=None):
         logging.error("Preprocessing produced no usable data; skipping this cycle.")
         return False
 
+    if metrics_are_stale(df, config):
+        return False
+
     model, features_to_use = train_anomaly_models(df, config)
     if model is None:
         logging.error("Model training failed; skipping this cycle.")
@@ -120,7 +157,13 @@ def run_cycle(config, circuit_breaker=None):
     # object keys. Comparing the column against int(container_id) matched no
     # rows at all, so the very first container raised IndexError and killed
     # the whole run.
-    container_ids = [str(cid) for cid in df["container_id"].unique()]
+    #
+    # Only containers present in the NEWEST snapshot are evaluated. Taking
+    # unique() over the whole retained history evaluated containers that were
+    # stopped or destroyed hours ago -- and, because Proxmox reuses VMIDs, a
+    # brand new container could be scaled on its predecessor's metrics until
+    # the old rows aged out of the window.
+    container_ids = current_container_ids(df)
 
     ignored = ignored_container_ids(config)
     if ignored:
@@ -184,7 +227,6 @@ def run_cycle(config, circuit_breaker=None):
 def evaluate_container(container_id, df, model, features_to_use, container_config,
                        config, dry_run, min_confidence):
     """Decide and, unless dry_run is set, apply scaling for one container."""
-    scaling_config = config["scaling"]
     container_data = df[df["container_id"] == container_id]
     if container_data.empty:
         logging.warning(f"No metrics rows for container {container_id}; skipping.")
@@ -192,20 +234,26 @@ def evaluate_container(container_id, df, model, features_to_use, container_confi
 
     latest_metrics = container_data.iloc[-1].copy()
 
-    if container_config:
-        latest_metrics["current_cores"] = container_config.get(
-            "cores", scaling_config["min_cpu_cores"])
-        latest_metrics["current_ram_mb"] = container_config.get(
-            "memory_mb", scaling_config["min_ram_mb"])
-        logging.debug(
-            f"Container {container_id} current config: "
-            f"{container_config.get('cores')} cores, "
-            f"{container_config.get('memory_mb')} MB RAM"
+    # Every target this function computes is ABSOLUTE -- `pct set -cores N`,
+    # not a delta -- and every one is derived from the container's current
+    # allocation. Substituting the configured minimum when the fetch failed
+    # therefore does not degrade gracefully: it writes the container down to
+    # the floor in a single cycle, and the write is self-masking because the
+    # next fetch then reports the value we just imposed. Skip instead.
+    cores = (container_config or {}).get("cores")
+    memory_mb = (container_config or {}).get("memory_mb")
+    if cores is None or memory_mb is None:
+        logging.warning(
+            f"Skipping container {container_id}: its current allocation is unknown "
+            f"({'no response from the API' if not container_config else 'response missing cores/memory_mb'}). "
+            f"Scaling from a guessed allocation would resize it to the wrong absolute value."
         )
-    else:
-        latest_metrics["current_cores"] = scaling_config["min_cpu_cores"]
-        latest_metrics["current_ram_mb"] = scaling_config["min_ram_mb"]
-        logging.warning(f"Using defaults for container {container_id} (config fetch failed)")
+        return
+
+    latest_metrics["current_cores"] = cores
+    latest_metrics["current_ram_mb"] = memory_mb
+    logging.debug(
+        f"Container {container_id} current config: {cores} cores, {memory_mb} MB RAM")
 
     scaling_decision, confidence = predict_anomalies(
         model, latest_metrics, features_to_use, config)

@@ -32,6 +32,16 @@ class TestGetConfigEndpoint:
     def test_all_path_and_key_combinations(self, client, pct, url):
         assert client.get(url).status_code == 200
 
+    def test_a_container_without_cores_still_answers_200(self, client, pct):
+        """`cores` is optional in Proxmox. This used to be a permanent 500,
+        which sent the scaling loop down its guess-the-allocation path."""
+        pct.output = "arch: amd64\nmemory: 2048\n"
+        response = client.get("/resource/lxc/config?lxc_id=104")
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["data"]["cores"] is None
+        assert payload["data"]["memory_mb"] == 2048
+
     def test_missing_id_returns_structured_error(self, client, pct):
         response = client.get("/resource/lxc/config")
         assert response.status_code == 400
