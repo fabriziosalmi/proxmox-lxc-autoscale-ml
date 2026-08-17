@@ -121,6 +121,17 @@ class TestGunicornConfig:
         assert module.graceful_timeout == 15
         assert module.max_requests == 100
 
+    def test_makes_the_api_directory_importable(self, tmp_path, monkeypatch):
+        """The API modules import each other by bare name, so the service must
+        not depend on the unit's WorkingDirectory being right."""
+        import os
+
+        module = self._load(tmp_path, monkeypatch, {})
+        expected = os.path.dirname(os.path.abspath(module.__file__))
+        assert module.chdir == expected
+        assert module.pythonpath == expected
+        assert os.path.exists(os.path.join(module.pythonpath, "lxc_autoscale_api.py"))
+
     def test_defaults_to_a_single_worker(self, tmp_path, monkeypatch):
         """Rate limiting and Prometheus counters live in process memory, so
         extra worker processes multiply the rate limit and split /metrics."""

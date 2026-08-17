@@ -45,6 +45,12 @@ bind = "{}:{}".format(
     _server.get("port", 5000),
 )
 
+# The API modules are deployed flat and import each other by bare name, so the
+# directory holding them has to be importable. Deriving it from this file means
+# the service does not silently depend on the unit's WorkingDirectory.
+chdir = os.path.dirname(os.path.abspath(__file__))
+pythonpath = chdir
+
 wsgi_app = "lxc_autoscale_api:app"
 
 workers = _gunicorn.get("workers", 1)
