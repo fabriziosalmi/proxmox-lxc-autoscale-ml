@@ -5,6 +5,69 @@ All notable changes to the LXC AutoScale ML project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`/resource/vm/config` always failed** ([Issue #14](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/issues/14)).
+  The validation decorator read `request.json`, which aborts a request that has
+  no JSON body — the normal case for a GET. Older Flask reported 400, current
+  Flask 415. The ML loop polls this endpoint before every scaling decision, so
+  it was affected too. Parameters are now read from the query string and the
+  JSON body alike.
+- **`/clone/delete` raised `NameError` on every call** from an undefined
+  variable, and never reached the deletion helper it shadowed.
+- **`/clone/create` leaked its temporary snapshot** when the clone or the start
+  failed.
+- **Endpoints returned 500 instead of 400** for missing or malformed
+  parameters: `/scale/storage/increase`, `/snapshot/create`,
+  `/snapshot/rollback` and both `/clone` routes indexed the JSON body directly.
+- **`/resource/node/status` passed an unvalidated node name** into a `pvesh`
+  path.
+- **Failed `pct` commands were reported as success.** `resource_checking`
+  ignored the exit status and had no timeout.
+- **API key authentication and `/metrics` did not exist.** Both were documented
+  and implemented but never wired into the app; `/metrics` returned 404 and the
+  `authentication` config section had no effect.
+- **The rate limiter serialised the whole API** by holding its global lock
+  while the request handler ran.
+- **`apply_scaling` crashed inside its own error handler** on a connection
+  error, masking API outages instead of retrying. Requests now have a timeout.
+- **Log files were never rotated.** The model imported `RotatingFileHandler`
+  and used a plain `FileHandler`; the API ignored its `logging` config section
+  entirely.
+- **`install.sh` overwrote existing configuration on upgrade.** Shipped
+  defaults are now written to `<name>.yaml.new` instead.
+- The single-instance lock moved from world-writable `/tmp` to `/run`.
+- `create_app()` no longer crashes on a config file that omits optional
+  sections.
+
+### Added
+
+- **`/resource/lxc/*` endpoints and `lxc_id` parameters.** These objects are
+  LXC containers, not VMs. The `vm` spellings keep working. Picks up the intent
+  of [PR #15](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/pull/15)
+  by [@deswong](https://github.com/deswong) without breaking existing
+  deployments.
+- **`/resource/cluster/status`**, which `check_cluster_status()` implemented but
+  no route exposed.
+- **A test suite** — 105 tests over the routes, validators, authentication,
+  rate limiting and configuration loading. The project had none.
+- **CI**: ruff, pytest on Python 3.9/3.11/3.12/3.13, a dependency-resolution
+  job and shellcheck over the install scripts.
+- **Dependabot configuration** for pip, the docs npm tree and workflow actions.
+- **`server.host` / `server.port`** configuration for the API listener, and
+  `api.timeout_seconds` / `api.max_concurrent` for the model, all of which the
+  documentation already described.
+
+### Changed
+
+- The API index page is generated from the route table and no longer loads
+  Bootstrap and jQuery from public CDNs.
+- Flask 3.0.0 → 3.1.3.
+- The configuration reference now matches the shipped YAML (`api_keys` is a
+  list, not `api_key`; `logging.level`, not `logging.log_level`).
+
 ## [1.2.0] - 2025-12-24
 
 Major release with critical bug fixes, performance improvements, and new enterprise features.

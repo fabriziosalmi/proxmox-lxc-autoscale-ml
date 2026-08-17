@@ -99,12 +99,15 @@ def main():
             logging.info(f"Batch fetching configs for {len(container_ids)} containers...")
             batch_start = time.time()
 
+            api_config = config["api"]
             all_configs = fetch_container_configs_sync(
                 container_ids,
-                config["api"]["api_url"],
+                api_config["api_url"],
                 circuit_breaker=api_circuit_breaker,
-                timeout=5,
-                max_concurrent=10
+                # `timeout` is accepted as well for configs written against the
+                # older documentation.
+                timeout=api_config.get("timeout_seconds", api_config.get("timeout", 5)),
+                max_concurrent=api_config.get("max_concurrent", 10),
             )
 
             batch_duration = time.time() - batch_start

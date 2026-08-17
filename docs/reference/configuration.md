@@ -22,10 +22,17 @@ server:
   host: "0.0.0.0"          # Bind address
   port: 5000               # Listen port
 
+# LXC
+lxc:
+  node: "proxmox"          # Proxmox node name or IP
+  default_storage: "local-lvm"
+  timeout_seconds: 10      # Timeout for pct/pvesh commands
+
 # Authentication
 authentication:
-  enabled: true            # Enable API key authentication
-  api_key: "your-key"      # API key (change this!)
+  enabled: false           # Enable API key authentication
+  api_keys:                # One or more valid keys (change these!)
+    - "your-key"
 
 # Rate Limiting
 rate_limiting:
@@ -35,10 +42,17 @@ rate_limiting:
 
 # Logging
 logging:
-  log_level: "INFO"        # DEBUG, INFO, WARNING, ERROR
-  log_file: "/var/log/autoscaleapi.log"
-  access_log: "/var/log/autoscaleapi_access.log"
-  error_log: "/var/log/autoscaleapi_error.log"
+  level: "INFO"            # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  # log_file: "/var/log/lxc_autoscale_api.log"  # Unset: log to stdout only
+  rotate: true             # Rotate log_file when it grows past max_log_size_mb
+  max_log_size_mb: 100
+  backup_count: 5
+
+# Error Handling
+error_handling:
+  show_stack_traces: false # Include exception detail in API error responses
+  log_errors: true
 ```
 
 ### API Options
@@ -47,12 +61,26 @@ logging:
 |--------|------|---------|-------------|
 | `server.host` | string | `0.0.0.0` | Network interface to bind |
 | `server.port` | integer | `5000` | TCP port number |
-| `authentication.enabled` | boolean | `true` | Require API key |
-| `authentication.api_key` | string | - | Secret API key |
+| `lxc.node` | string | - | Proxmox node name or IP |
+| `lxc.timeout_seconds` | integer | `30` | Timeout for `pct`/`pvesh` commands |
+| `authentication.enabled` | boolean | `false` | Require API key |
+| `authentication.api_keys` | list | `[]` | Accepted API keys |
 | `rate_limiting.enabled` | boolean | `true` | Enable rate limits |
 | `rate_limiting.max_requests_per_minute` | integer | `120` | Request limit per IP |
 | `rate_limiting.time_window_seconds` | integer | `60` | Window duration |
-| `logging.log_level` | string | `INFO` | Minimum log level |
+| `logging.level` | string | `INFO` | Minimum log level |
+| `logging.log_file` | string | - | Optional log file; stdout only when unset |
+| `logging.rotate` | boolean | `true` | Rotate `log_file` |
+| `logging.max_log_size_mb` | integer | `100` | Rotation threshold |
+| `logging.backup_count` | integer | `5` | Rotated files to keep |
+| `error_handling.show_stack_traces` | boolean | `false` | Expose exception detail in responses |
+
+::: warning Binding and authentication
+The API runs as root and executes `pct` commands. With the default
+`server.host: 0.0.0.0` it is reachable from every interface. On the standard
+single-node layout, where the ML service runs beside it, bind to `127.0.0.1`.
+If it must be reachable remotely, enable `authentication` and put it behind TLS.
+:::
 
 ## Model Configuration
 
@@ -64,9 +92,15 @@ logging:
 # API Configuration
 api:
   api_url: "http://127.0.0.1:5000"  # API base URL
-  timeout: 5               # Request timeout (seconds)
-  max_concurrent: 10       # Max parallel requests
-  retry_attempts: 3        # Retry failed requests
+  cores_endpoint: "/scale/cores"
+  ram_endpoint: "/scale/ram"
+  timeout_seconds: 5       # Request timeout (seconds)
+  max_concurrent: 10       # Max parallel config fetches
+
+# Retry Logic for API Calls
+retry_logic:
+  max_retries: 3           # Retry failed requests
+  retry_delay: 2           # Delay between retries (seconds)
 
 # Data Configuration
 data:
@@ -128,9 +162,12 @@ sleep_interval: 60         # Seconds between cycles
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `api.api_url` | string | `http://127.0.0.1:5000` | API base URL |
-| `api.timeout` | integer | `5` | Request timeout in seconds |
-| `api.max_concurrent` | integer | `10` | Maximum parallel requests |
-| `api.retry_attempts` | integer | `3` | Retry count for failures |
+| `api.cores_endpoint` | string | `/scale/cores` | CPU scaling endpoint |
+| `api.ram_endpoint` | string | `/scale/ram` | RAM scaling endpoint |
+| `api.timeout_seconds` | integer | `5` | Request timeout in seconds (`timeout` also accepted) |
+| `api.max_concurrent` | integer | `10` | Maximum parallel config fetches |
+| `retry_logic.max_retries` | integer | `3` | Retry count for failures |
+| `retry_logic.retry_delay` | integer | `2` | Delay between retries in seconds |
 
 #### IsolationForest Settings
 
@@ -172,6 +209,8 @@ sleep_interval: 60         # Seconds between cycles
 |--------|------|---------|-------------|
 | `ignore_lxc` | list | `[]` | Container IDs to exclude |
 | `sleep_interval` | integer | `60` | Seconds between cycles |
+| `lock_file` | string | `/run/lxc_autoscale_ml.lock` | Single-instance lock; keep it out of world-writable `/tmp` |
+| `log_file` | string | `/var/log/lxc_autoscale_ml.log` | Rotated at 10 MB, 5 backups kept |
 
 ## Monitor Configuration
 
@@ -272,7 +311,7 @@ Optimized for 60+ containers:
 ```yaml
 api:
   max_concurrent: 15
-  timeout: 10
+  timeout_seconds: 10
 
 circuit_breaker:
   failure_threshold: 3

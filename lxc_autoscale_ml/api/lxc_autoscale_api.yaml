@@ -65,6 +65,11 @@ logging:
   
   # Format for log messages. Uses Python's logging format string.
   log_format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"  # Log format
+
+  # Optional log file. When unset the API logs to stdout only, which systemd
+  # captures in the journal (journalctl -u lxc_autoscale_api). When set, the
+  # file is rotated using max_log_size_mb and backup_count above.
+  # log_file: "/var/log/lxc_autoscale_api.log"
   
   # Path to the file where access logs are written.
   access_log_file: "access.log"  # Separate access log for HTTP requests

@@ -112,7 +112,9 @@ def apply_scaling(lxc_id, new_cores, new_ram, config):
     cores_endpoint = config["api"].get("cores_endpoint", "/scale/cores")
     ram_endpoint = config["api"].get("ram_endpoint", "/scale/ram")
 
-    request_timeout = config["api"].get("timeout_seconds", 10)
+    # `timeout` is accepted as well for configs written against the older
+    # documentation.
+    request_timeout = config["api"].get("timeout_seconds", config["api"].get("timeout", 10))
 
     def perform_request(url, data, resource_type):
         resource_key = "cores" if resource_type == "CPU" else "memory"

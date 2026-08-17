@@ -25,11 +25,8 @@ from validation import (
 from authentication import require_api_key
 from metrics import metrics_endpoint, record_api_request, record_scaling_action
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-)
-
+# Logging is configured from the `logging` section of the config file by
+# create_app(), so there is no basicConfig call here.
 app = create_app()
 
 # Endpoints are documented under both the accurate "lxc" spelling and the
@@ -323,6 +320,7 @@ def metrics_route():
 
 
 @app.route('/routes', methods=['GET'])
+@require_api_key
 def list_routes():
     routes = []
     for rule in app.url_map.iter_rules():

@@ -63,6 +63,8 @@ api:
   api_url: "http://127.0.0.1:5000"  # Base URL for the API used for scaling actions
   cores_endpoint: "/scale/cores"  # Endpoint for scaling CPU cores
   ram_endpoint: "/scale/ram"  # Endpoint for scaling RAM
+  timeout_seconds: 5  # Per-request timeout when talking to the API
+  max_concurrent: 10  # Maximum parallel config fetches
 
 # Retry Logic for API Calls
 retry_logic:

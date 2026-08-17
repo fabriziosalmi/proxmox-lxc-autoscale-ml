@@ -74,14 +74,14 @@ curl -H "X-API-Key: YOUR_API_KEY" http://localhost:5000/routes
 
 ```bash
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "http://localhost:5000/resource/vm/status?vm_id=104"
+  "http://localhost:5000/resource/lxc/status?lxc_id=104"
 ```
 
 ### Get Container Configuration
 
 ```bash
 curl -H "X-API-Key: YOUR_API_KEY" \
-  "http://localhost:5000/resource/vm/config?vm_id=104"
+  "http://localhost:5000/resource/lxc/config?lxc_id=104"
 ```
 
 ### Manual CPU Scaling
@@ -90,7 +90,7 @@ curl -H "X-API-Key: YOUR_API_KEY" \
 curl -X POST http://localhost:5000/scale/cores \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"vm_id": 104, "cores": 4}'
+  -d '{"lxc_id": 104, "cores": 4}'
 ```
 
 ### Manual RAM Scaling
@@ -99,7 +99,7 @@ curl -X POST http://localhost:5000/scale/cores \
 curl -X POST http://localhost:5000/scale/ram \
   -H "Content-Type: application/json" \
   -H "X-API-Key: YOUR_API_KEY" \
-  -d '{"vm_id": 104, "memory": 4096}'
+  -d '{"lxc_id": 104, "memory": 4096}'
 ```
 
 ## Checking Metrics

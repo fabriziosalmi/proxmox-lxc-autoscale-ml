@@ -100,13 +100,13 @@ All endpoints except `/health/check` and `/metrics` now require authentication.
 **Before (1.x):**
 
 ```bash
-curl http://proxmox:5000/resource/vm/status?vm_id=104
+curl http://proxmox:5000/resource/lxc/status?lxc_id=104
 ```
 
 **After (2.0):**
 
 ```bash
-curl -H "X-API-Key: your-key" http://proxmox:5000/resource/vm/status?vm_id=104
+curl -H "X-API-Key: your-key" http://proxmox:5000/resource/lxc/status?lxc_id=104
 ```
 
 ### Default Ignore List Changed
@@ -127,13 +127,13 @@ If you have scripts calling the API, update them to include authentication:
 # Old
 curl -X POST http://proxmox:5000/scale/cores \
   -H "Content-Type: application/json" \
-  -d '{"vm_id": 104, "cores": 4}'
+  -d '{"lxc_id": 104, "cores": 4}'
 
 # New
 curl -X POST http://proxmox:5000/scale/cores \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"vm_id": 104, "cores": 4}'
+  -d '{"lxc_id": 104, "cores": 4}'
 ```
 
 ## Rollback Procedure
