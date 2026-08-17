@@ -1,6 +1,13 @@
-"""Prometheus metrics exporter for LXC AutoScale."""
+"""Prometheus metrics exporter for LXC AutoScale.
+
+Only the API process serves /metrics, so only metrics the API can populate are
+declared here. Model-prediction and circuit-breaker metrics used to be declared
+as well, but they belong to the separate ML process, which has no exporter --
+so they appeared on /metrics and were permanently empty. Reintroduce them
+alongside an exporter in that process.
+"""
 try:
-    from prometheus_client import Counter, Gauge, Histogram, generate_latest, CONTENT_TYPE_LATEST
+    from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
     PROMETHEUS_AVAILABLE = True
 except ImportError:
     PROMETHEUS_AVAILABLE = False
@@ -60,31 +67,6 @@ if PROMETHEUS_AVAILABLE:
         ['container_id']
     )
 
-    # Model Metrics
-    model_predictions_total = Counter(
-        'lxc_autoscale_model_predictions_total',
-        'Total ML model predictions',
-        ['container_id', 'prediction']
-    )
-
-    model_confidence = Histogram(
-        'lxc_autoscale_model_confidence',
-        'ML model confidence scores',
-        ['container_id']
-    )
-
-    # Circuit Breaker Metrics
-    circuit_breaker_state = Gauge(
-        'lxc_autoscale_circuit_breaker_state',
-        'Circuit breaker state (0=closed, 1=open)',
-        ['service']
-    )
-
-    circuit_breaker_failures = Counter(
-        'lxc_autoscale_circuit_breaker_failures_total',
-        'Total circuit breaker failures',
-        ['service']
-    )
 
 def metrics_endpoint():
     """Generate Prometheus metrics endpoint."""
@@ -139,31 +121,6 @@ def update_container_resources(container_id, cpu_cores=None, memory_mb=None,
     if memory_usage is not None:
         container_memory_usage_mb.labels(container_id=container_id).set(memory_usage)
 
-def record_model_prediction(container_id, prediction, confidence):
-    """Record ML model prediction metrics."""
-    if not PROMETHEUS_AVAILABLE:
-        return
-
-    prediction_label = 'anomaly' if prediction == -1 else 'normal'
-    model_predictions_total.labels(
-        container_id=container_id,
-        prediction=prediction_label
-    ).inc()
-    model_confidence.labels(container_id=container_id).observe(confidence)
-
-def update_circuit_breaker_state(service, is_open):
-    """Update circuit breaker state metric."""
-    if not PROMETHEUS_AVAILABLE:
-        return
-
-    circuit_breaker_state.labels(service=service).set(1 if is_open else 0)
-
-def record_circuit_breaker_failure(service):
-    """Record circuit breaker failure."""
-    if not PROMETHEUS_AVAILABLE:
-        return
-
-    circuit_breaker_failures.labels(service=service).inc()
 
 # Log warning if Prometheus is not available
 if not PROMETHEUS_AVAILABLE:

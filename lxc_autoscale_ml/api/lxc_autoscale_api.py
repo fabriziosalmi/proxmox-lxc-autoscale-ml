@@ -23,7 +23,12 @@ from validation import (
     validate_node_name,
 )
 from authentication import require_api_key
-from metrics import metrics_endpoint, record_api_request, record_scaling_action
+from metrics import (
+    metrics_endpoint,
+    record_api_request,
+    record_scaling_action,
+    update_container_resources,
+)
 
 # Logging is configured from the `logging` section of the config file by
 # create_app(), so there is no basicConfig call here.
@@ -297,6 +302,9 @@ def get_lxc_config_route():
     try:
         lxc_manager = LXCManager()
         cores, memory = lxc_manager.get_current_resources(lxc_id)
+        # The only place the API learns a container's real allocation, so it is
+        # also where the gauges get their value.
+        update_container_resources(lxc_id, cpu_cores=cores, memory_mb=memory)
         return create_response(
             data={"lxc_id": lxc_id, "vm_id": lxc_id, "cores": cores, "memory_mb": memory},
             message=f"Successfully retrieved configuration for container {lxc_id}",

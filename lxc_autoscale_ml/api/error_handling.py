@@ -28,15 +28,20 @@ def handle_error(exception, status_code=500):
 
     return jsonify(response), status_code
 
-# Function to notify admins of critical errors (stub function)
 def notify_on_critical_error(exception):
-    error_handling_config = current_app.config['ERROR_HANDLING']
+    """Placeholder for delivering critical-error notifications.
+
+    No transport is configured or implemented. This used to log "Notified
+    {recipient} of the error", which is a false statement in the operator's log
+    for a message that was never sent -- exactly the kind of thing someone
+    relies on during an incident. It now says plainly that nothing was sent.
+    """
+    error_handling_config = current_app.config.get('ERROR_HANDLING', {})
     recipients = error_handling_config.get('notification_recipients', [])
 
-    # Log the notification action
-    logging.info(f"Notifying recipients of critical error: {', '.join(recipients)}")
-
-    # Implement actual notification logic (e.g., send an email or post to a Slack channel)
-    # This is a placeholder for demonstration purposes
-    for recipient in recipients:
-        logging.info(f"Notified {recipient} of the error: {str(exception)}")
+    logging.warning(
+        "notify_on_critical_errors is enabled but no notification transport is "
+        "implemented; no message was sent to %s. Error: %s",
+        ", ".join(recipients) or "(no recipients configured)",
+        exception,
+    )
