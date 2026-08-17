@@ -25,6 +25,7 @@ ignore = [
 # Proxmox management inherently shells out to pct/pvesh/pvecm.
 "lxc_autoscale_ml/api/lxc_management.py" = ["S603", "S607"]
 "lxc_autoscale_ml/api/resource_checking.py" = ["S603", "S607"]
+"lxc_autoscale_ml/api/health_check.py" = ["S603", "S607"]
 "lxc_autoscale_ml/monitor/lxc_monitor.py" = ["S603", "S607"]
 "tests/*" = ["S105", "S106"]
 

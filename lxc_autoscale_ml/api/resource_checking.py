@@ -24,16 +24,25 @@ def _run(command):
     A non-zero exit status raises, so a failed lookup can no longer be reported
     to the caller as an empty success.
     """
-    logging.info("Running command: %s", " ".join(command))
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        timeout=_timeout(),
-    )
+    printable = " ".join(command)
+    logging.info("Running command: %s", printable)
+    try:
+        result = subprocess.run(  # noqa: S603 - fixed argv, no shell
+            command,
+            capture_output=True,
+            text=True,
+            timeout=_timeout(),
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError(f"Command '{printable}' timed out") from e
+    except FileNotFoundError as e:
+        raise RuntimeError(
+            f"'{command[0]}' not found. Is this running on a Proxmox host?"
+        ) from e
+
     if result.returncode != 0:
         raise RuntimeError(
-            f"Command '{' '.join(command)}' failed with exit code "
+            f"Command '{printable}' failed with exit code "
             f"{result.returncode}: {result.stderr.strip()}"
         )
     return result.stdout.strip()

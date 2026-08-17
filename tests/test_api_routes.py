@@ -50,7 +50,7 @@ class TestStatusEndpoint:
         for url in ("/resource/lxc/status?lxc_id=104", "/resource/vm/status?vm_id=104"):
             response = client.get(url)
             assert response.status_code == 200, url
-        assert all(cmd.startswith("pct status 104") for cmd in pct)
+        assert pct == [["pct", "status", "104"], ["pct", "status", "104"]]
 
     def test_status_requires_valid_id(self, client, pct):
         assert client.get("/resource/lxc/status?lxc_id=notanid").status_code == 400
@@ -84,7 +84,7 @@ class TestScalingEndpoints:
     def test_set_cores(self, client, pct):
         response = client.post("/scale/cores", json={"lxc_id": 104, "cores": 4})
         assert response.status_code == 200
-        assert "pct set 104 -cores 4" in pct
+        pct.assert_ran("pct", "set", 104, "-cores", 4)
 
     def test_set_cores_with_legacy_key(self, client, pct):
         assert client.post("/scale/cores", json={"vm_id": 104, "cores": 4}).status_code == 200
@@ -92,7 +92,7 @@ class TestScalingEndpoints:
     def test_set_ram(self, client, pct):
         response = client.post("/scale/ram", json={"lxc_id": 104, "memory": 4096})
         assert response.status_code == 200
-        assert "pct set 104 -memory 4096" in pct
+        pct.assert_ran("pct", "set", 104, "-memory", 4096)
 
     @pytest.mark.parametrize(
         "payload",
@@ -130,7 +130,7 @@ class TestSnapshotEndpoints:
             "/snapshot/create", json={"lxc_id": 104, "snapshot_name": "backup-1"}
         )
         assert response.status_code == 200
-        assert "pct snapshot 104 backup-1" in pct
+        pct.assert_ran("pct", "snapshot", 104, "backup-1")
 
     def test_snapshot_name_is_validated(self, client, pct):
         response = client.post(
@@ -149,7 +149,7 @@ class TestSnapshotEndpoints:
             "/snapshot/rollback", json={"lxc_id": 104, "snapshot_name": "backup-1"}
         )
         assert response.status_code == 200
-        assert "pct rollback 104 backup-1" in pct
+        pct.assert_ran("pct", "rollback", 104, "backup-1")
 
 
 class TestCloneEndpoints:
@@ -160,42 +160,24 @@ class TestCloneEndpoints:
         )
         assert response.status_code == 200
         # Underscores are normalised because pct rejects them in hostnames.
-        assert any("--hostname cloned-container" in cmd for cmd in pct)
+        assert any(argv[:2] == ["pct", "clone"] and "cloned-container" in argv for argv in pct)
         # The temporary snapshot must be cleaned up.
-        assert "pct delsnapshot 104 snapshot-105" in pct
+        pct.assert_ran("pct", "delsnapshot", 104, "snapshot-105")
 
-    def test_temporary_snapshot_removed_when_cloning_fails(self, client, monkeypatch, pct):
-        import lxc_management
-
-        original = lxc_management.LXCManager._run_command
-
-        def fail_on_clone(self, command):
-            if command.startswith("pct clone"):
-                pct.append(command)
-                raise RuntimeError("storage full")
-            return original(self, command)
-
-        monkeypatch.setattr(lxc_management.LXCManager, "_run_command", fail_on_clone)
+    def test_temporary_snapshot_removed_when_cloning_fails(self, client, pct):
+        pct.responses = {("pct", "clone"): RuntimeError("storage full")}
         response = client.post(
             "/clone/create",
             json={"lxc_id": 104, "new_lxc_id": 105, "new_lxc_name": "clone1"},
         )
         assert response.status_code == 500
-        assert "pct delsnapshot 104 snapshot-105" in pct
+        pct.assert_ran("pct", "delsnapshot", 104, "snapshot-105")
 
-    def test_failed_cleanup_does_not_mask_the_clone_error(self, client, monkeypatch, pct):
-        import lxc_management
-
-        original = lxc_management.LXCManager._run_command
-
-        def fail_clone_and_cleanup(self, command):
-            if command.startswith("pct clone"):
-                raise RuntimeError("storage full")
-            if command.startswith("pct delsnapshot"):
-                raise RuntimeError("snapshot is locked")
-            return original(self, command)
-
-        monkeypatch.setattr(lxc_management.LXCManager, "_run_command", fail_clone_and_cleanup)
+    def test_failed_cleanup_does_not_mask_the_clone_error(self, client, pct):
+        pct.responses = {
+            ("pct", "clone"): RuntimeError("storage full"),
+            ("pct", "delsnapshot"): RuntimeError("snapshot is locked"),
+        }
         response = client.post(
             "/clone/create",
             json={"lxc_id": 104, "new_lxc_id": 105, "new_lxc_name": "clone1"},
@@ -205,17 +187,8 @@ class TestCloneEndpoints:
         # be the clone failure, not the cleanup failure that happened after it.
         assert "storage full" in response.get_json()["message"]
 
-    def test_cleanup_failure_after_a_successful_clone_is_reported(self, client, monkeypatch, pct):
-        import lxc_management
-
-        original = lxc_management.LXCManager._run_command
-
-        def fail_cleanup(self, command):
-            if command.startswith("pct delsnapshot"):
-                raise RuntimeError("snapshot is locked")
-            return original(self, command)
-
-        monkeypatch.setattr(lxc_management.LXCManager, "_run_command", fail_cleanup)
+    def test_cleanup_failure_after_a_successful_clone_is_reported(self, client, pct):
+        pct.responses = {("pct", "delsnapshot"): RuntimeError("snapshot is locked")}
         response = client.post(
             "/clone/create",
             json={"lxc_id": 104, "new_lxc_id": 105, "new_lxc_name": "clone1"},
@@ -240,8 +213,35 @@ class TestOperationalEndpoints:
         assert "bootstrapcdn" not in body
         assert "jquery" not in body
 
-    def test_health_check(self, client):
-        assert client.get("/health/check").status_code == 200
+    def test_health_check_reports_healthy_when_pct_works(self, client, monkeypatch):
+        import health_check
+
+        monkeypatch.setattr(health_check, "_check_pct", lambda: (True, "ok"))
+        response = client.get("/health/check")
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["status"] == "healthy"
+        assert payload["checks"]["lxc_commands"]["ok"] is True
+
+    def test_health_check_reports_unhealthy_when_pct_is_missing(self, client, monkeypatch):
+        """A health check that cannot fail is worse than none."""
+        import health_check
+
+        monkeypatch.setattr(health_check, "_check_pct", lambda: (False, "pct not found in PATH"))
+        response = client.get("/health/check")
+        assert response.status_code == 503
+        payload = response.get_json()
+        assert payload["status"] == "unhealthy"
+        assert payload["checks"]["lxc_commands"]["detail"] == "pct not found in PATH"
+
+    def test_health_check_flags_an_unconfigured_node(self, app, client, monkeypatch):
+        import health_check
+
+        monkeypatch.setattr(health_check, "_check_pct", lambda: (True, "ok"))
+        monkeypatch.setitem(app.config, "LXC_NODE", None)
+        response = client.get("/health/check")
+        assert response.status_code == 503
+        assert response.get_json()["checks"]["configuration"]["ok"] is False
 
     def test_metrics_endpoint_is_registered(self, client):
         response = client.get("/metrics")
