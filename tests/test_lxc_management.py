@@ -85,15 +85,11 @@ class TestGetConfig:
     def test_get_current_resources(self, manager, pct):
         assert manager.get_current_resources(104) == (2, 2048)
 
-    def test_missing_fields_raise(self, manager, pct):
+    def test_absent_fields_are_reported_as_unknown_not_as_an_error(self, manager, pct):
+        """See TestOptionalConfigFields: `cores` is optional in Proxmox, so its
+        absence is a fact about the container rather than a failure."""
         pct.output = "arch: amd64\n"
-        with pytest.raises(RuntimeError, match="current resources"):
-            manager.get_current_resources(104)
-
-    def test_non_numeric_fields_raise(self, manager, pct):
-        pct.output = "cores: many\nmemory: 2048\n"
-        with pytest.raises(RuntimeError, match="current resources"):
-            manager.get_current_resources(104)
+        assert manager.get_current_resources(104) == (None, None)
 
 
 class TestDiskSize:
@@ -154,3 +150,24 @@ class TestCommandShapes:
         )
         manager.clone(104, 106, "web-2")
         pct.assert_ran("pct", "clone", 104, 106, "--hostname", "web-2", "--full")
+
+
+class TestOptionalConfigFields:
+    """`cores` is optional in Proxmox: `pct create` without `--cores` leaves it
+    unset, meaning "all host cores". Treating that as an error made
+    /resource/lxc/config return 500 for such a container permanently."""
+
+    def test_missing_cores_is_reported_as_unknown(self, manager, pct):
+        pct.output = "arch: amd64\nmemory: 2048\nrootfs: local-lvm:vm-104-disk-0,size=8G\n"
+        assert manager.get_current_resources(104) == (None, 2048)
+
+    def test_missing_memory_is_reported_as_unknown(self, manager, pct):
+        pct.output = "arch: amd64\ncores: 2\n"
+        assert manager.get_current_resources(104) == (2, None)
+
+    def test_non_numeric_values_are_reported_as_unknown(self, manager, pct):
+        pct.output = "cores: many\nmemory: 2048\n"
+        assert manager.get_current_resources(104) == (None, 2048)
+
+    def test_both_present_is_unchanged(self, manager, pct):
+        assert manager.get_current_resources(104) == (2, 2048)

@@ -2,7 +2,6 @@ import pandas as pd
 import logging
 import json
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 
 def load_data(file_path):
     try:
@@ -145,14 +144,20 @@ def preprocess_data(df, config):
         df['min_memory'] = df.groupby('container_id')['memory_usage_mb'].transform(
             lambda x: x.rolling(window=rolling_window_size, min_periods=1).min())
 
-        # Feature scaling
-        scaler = StandardScaler()
-        features_to_scale = [
-            'cpu_usage_percent', 'memory_usage_mb', 'cpu_per_process', 'memory_per_process', 'time_diff',
-            'cpu_trend', 'memory_trend', 'max_cpu', 'min_cpu', 'max_memory', 'min_memory',
-            'cpu_memory_ratio'
-        ]
-        df[features_to_scale] = scaler.fit_transform(df[features_to_scale])
+        # Deliberately NOT scaled here.
+        #
+        # This function used to standard-scale twelve columns in place, two of
+        # which -- cpu_usage_percent and memory_usage_mb -- are read by
+        # determine_scaling_action and compared against percentage thresholds.
+        # A z-score never exceeds cpu_scale_up_threshold (75) and is almost
+        # always below cpu_scale_down_threshold (30), so every container was
+        # scaled DOWN on both axes every cycle regardless of real load. A
+        # container at 99% CPU produced the same decision as one at 3%.
+        #
+        # The scaling was also redundant: train_anomaly_models wraps
+        # IsolationForest in Pipeline([('scaler', StandardScaler()), ...]) and
+        # fits it on this same frame, so the model standardises its own inputs
+        # and its features are unchanged by this removal.
 
         logging.info("Feature engineering, spike detection, and trend detection completed.")
     except Exception:
