@@ -3,5 +3,5 @@
 # the tests exercise the data pipeline and the metrics collector too.
 -r requirements.txt
 
-pytest==8.4.2
+pytest==9.1.1
 ruff==0.14.4
