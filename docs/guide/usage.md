@@ -232,7 +232,7 @@ systemctl restart lxc_monitor
 If the service fails to start due to a stale lock:
 
 ```bash
-rm /var/lock/lxc_autoscale_ml.lock
+rm /run/lxc_autoscale_ml.lock
 systemctl start lxc_autoscale_ml
 ```
 

@@ -241,8 +241,8 @@ circuit_breaker:
 | `/etc/lxc_autoscale_ml/lxc_monitor.yaml` | Monitor configuration |
 | `/var/log/lxc_metrics.json` | Collected metrics |
 | `/var/log/lxc_autoscale_ml.log` | Model service log |
-| `/var/log/autoscaleapi.log` | API service log |
-| `/var/lock/lxc_autoscale_ml.lock` | Process lock file |
+| `/var/log/lxc_autoscale_api.log` | API service log |
+| `/run/lxc_autoscale_ml.lock` | Process lock file |
 
 ## Next Steps
 

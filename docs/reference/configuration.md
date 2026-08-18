@@ -140,11 +140,21 @@ gunicorn:
   # Time to wait before forcefully killing workers during a graceful restart.
   graceful_timeout_seconds: 30  
   
-  # Number of requests a worker will handle before being restarted. Helps to prevent memory leaks.
-  max_requests: 500  
-  
-  # Adds a random jitter to `max_requests` to avoid all workers restarting at the same time.
-  max_requests_jitter: 50
+  # Requests a worker handles before being recycled. 0 disables it, which is
+  # the default and is deliberate: the rate-limiter window and the Prometheus
+  # counters live in worker memory, so recycling silently resets both -- and a
+  # client's own rejected requests drove the recycle that cleared its window.
+  # The limiter evicts idle clients itself, so recycling is not needed to bound
+  # memory.
+  max_requests: 0
+
+  # Random spread on max_requests. Irrelevant while max_requests is 0.
+  max_requests_jitter: 0
+
+  # Access log format. Deliberately omits the query string: the default format
+  # logs the whole request line, and this log is not a place for anything a
+  # caller passes as a parameter.
+  access_log_format: '%(h)s "%(m)s %(U)s %(H)s" %(s)s %(b)s %(D)sus'
 ```
 
 ## Model configuration
@@ -219,6 +229,11 @@ api:
   cores_endpoint: "/scale/cores"  # Endpoint for scaling CPU cores
   ram_endpoint: "/scale/ram"  # Endpoint for scaling RAM
   timeout_seconds: 5  # Per-request timeout when talking to the API
+
+  # API key, sent as X-API-Key. REQUIRED if the API has
+  # authentication.enabled: true -- without it every request is rejected with
+  # 401 and autoscaling stops. Must match one of the API's authentication.api_keys.
+  # api_key: "your-secret-api-key-here"
   max_concurrent: 10  # Maximum parallel config fetches
 
 # Retry Logic for API Calls
@@ -236,11 +251,12 @@ circuit_breaker:
   timeout_seconds: 300  # How long the circuit stays open before retrying
 
 # Ignored Containers
-ignore_lxc:
-  # List container IDs to exclude from autoscaling
-  # Example: ["100", "999"] 
-  # Note: 101 and 102 are common first container IDs - don't ignore them by default!
-  []  # Empty list = scale all containers
+# Container IDs to exclude from autoscaling. An empty list scales everything.
+# IDs are matched as strings, so [101, 102] and ["101", "102"] both work.
+# Example: ignore_lxc: ["100", "999"]
+# Note: 101 and 102 are commonly the first containers on a host, so do not
+# ignore them out of habit.
+ignore_lxc: []
 ```
 
 ## Monitor configuration
@@ -292,6 +308,12 @@ monitoring:
   
   # Delay between retry attempts in seconds.
   retry_delay: 2
+
+  # Timeout in seconds for each pct invocation. Without a bound, one wedged
+  # container froze the whole collection cycle indefinitely: the process
+  # neither exited nor errored, so systemd never restarted it and the metrics
+  # file was never updated again.
+  command_timeout: 30
   
   # Maximum number of metrics entries to keep in the export file (prevents unbounded growth).
   max_metrics_entries: 1000  # Keeps last 1000 data points (~16 hours at 60s intervals)
@@ -325,8 +347,8 @@ monitoring:
 | `gunicorn.threads` | integer | `8` | Threads per worker |
 | `gunicorn.timeout_seconds` | integer | `120` | Worker timeout |
 | `gunicorn.graceful_timeout_seconds` | integer | `30` | Grace period on restart |
-| `gunicorn.max_requests` | integer | `500` | Requests before a worker is recycled |
-| `gunicorn.max_requests_jitter` | integer | `50` | Random spread on the above |
+| `gunicorn.max_requests` | integer | `0` | Requests before a worker is recycled. 0 disables it, deliberately: recycling resets the rate-limiter window and the Prometheus counters, and a client's own rejected requests drove the recycle that cleared its window. |
+| `gunicorn.max_requests_jitter` | integer | `0` | Random spread on the above. Irrelevant while recycling is off. |
 | `gunicorn.preload_app` | boolean | `true` | Load the app before forking |
 | `gunicorn.log_level` | string | `info` | Gunicorn's own log level |
 

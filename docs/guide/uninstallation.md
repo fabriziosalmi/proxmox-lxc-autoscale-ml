@@ -49,19 +49,19 @@ rm -rf /etc/lxc_autoscale_ml
 ```bash
 rm /var/log/lxc_metrics.json
 rm /var/log/lxc_autoscale_ml.log
-rm /var/log/autoscaleapi*.log
+rm /var/log/lxc_autoscale_api_*.log
 ```
 
 ### Step 6: Remove Lock File (If Exists)
 
 ```bash
-rm -f /var/lock/lxc_autoscale_ml.lock
+rm -f /run/lxc_autoscale_ml.lock
 ```
 
 ### Step 7: Remove Log Rotation Configuration (Optional)
 
 ```bash
-rm /etc/logrotate.d/lxc_autoscale
+rm /etc/logrotate.d/lxc-autoscale-api
 ```
 
 ## Verify Uninstallation

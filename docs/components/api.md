@@ -9,7 +9,7 @@ The API component provides a RESTful interface for managing LXC containers on Pr
 | Service | `lxc_autoscale_api` |
 | Configuration | `/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml` |
 | Default Port | 5000 |
-| Log File | `/var/log/autoscaleapi.log` |
+| Log File | `/var/log/lxc_autoscale_api.log` |
 
 ## Features
 
@@ -42,7 +42,7 @@ authentication:
 curl -H "X-API-Key: your-key" http://localhost:5000/routes
 
 # Query parameter authentication
-curl "http://localhost:5000/routes?api_key=your-key"
+curl -H "X-API-Key: your-key" http://localhost:5000/routes
 ```
 
 **Error response (401 Unauthorized):**
@@ -335,9 +335,9 @@ gunicorn:
 
 | File | Content |
 |------|---------|
-| `/var/log/autoscaleapi.log` | Main API logs |
-| `/var/log/autoscaleapi_access.log` | All incoming requests |
-| `/var/log/autoscaleapi_error.log` | Error logs |
+| `/var/log/lxc_autoscale_api.log` | Main API logs |
+| `/var/log/lxc_autoscale_api_access.log` | All incoming requests |
+| `/var/log/lxc_autoscale_api_error.log` | Error logs |
 
 ## HTTPS Setup
 

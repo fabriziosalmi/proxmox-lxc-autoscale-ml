@@ -9,9 +9,9 @@ This page documents file locations, log files, and system paths for LXC AutoScal
 | Path | Description |
 |------|-------------|
 | `/usr/local/bin/lxc_autoscale_ml/` | Application code |
-| `/usr/local/bin/lxc_autoscale_ml/api/` | API component |
-| `/usr/local/bin/lxc_autoscale_ml/model/` | Model component |
-| `/usr/local/bin/lxc_autoscale_ml/monitor/` | Monitor component |
+| `/usr/local/bin/lxc_autoscale_api/` | API component |
+| `/usr/local/bin/lxc_autoscale_ml/` | Model component |
+| `/usr/local/bin/` | Monitor component |
 
 ### Configuration Files
 
@@ -36,9 +36,9 @@ This page documents file locations, log files, and system paths for LXC AutoScal
 | Path | Content |
 |------|---------|
 | `/var/log/lxc_autoscale_ml.log` | Model service main log |
-| `/var/log/autoscaleapi.log` | API main log |
-| `/var/log/autoscaleapi_access.log` | API access log |
-| `/var/log/autoscaleapi_error.log` | API error log |
+| `/var/log/lxc_autoscale_api.log` | API main log |
+| `/var/log/lxc_autoscale_api_access.log` | API access log |
+| `/var/log/lxc_autoscale_api_error.log` | API error log |
 | `/var/log/lxc_monitor.log` | Monitor service log |
 
 ### Data Files
@@ -51,7 +51,7 @@ This page documents file locations, log files, and system paths for LXC AutoScal
 
 | Path | Purpose |
 |------|---------|
-| `/var/lock/lxc_autoscale_ml.lock` | Model service instance lock |
+| `/run/lxc_autoscale_ml.lock` | Model service instance lock |
 
 ## Service Names
 
@@ -154,11 +154,11 @@ The application uses system Python packages installed via apt.
 
 ### Recommended Configuration
 
-Create `/etc/logrotate.d/lxc_autoscale`:
+Create `/etc/logrotate.d/lxc-autoscale-api`:
 
 ```
 /var/log/lxc_autoscale_ml.log
-/var/log/autoscaleapi*.log
+/var/log/lxc_autoscale_api_*.log
 /var/log/lxc_monitor.log {
     daily
     missingok
@@ -224,5 +224,5 @@ journalctl -u lxc_monitor -n 50
 ls -la /etc/lxc_autoscale_ml/
 ls -la /var/log/lxc_*.json
 ls -la /var/log/lxc_*.log
-ls -la /var/log/autoscaleapi*.log
+ls -la /var/log/lxc_autoscale_api_*.log
 ```

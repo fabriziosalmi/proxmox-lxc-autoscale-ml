@@ -120,6 +120,7 @@ gunicorn:
   # Random spread on max_requests. Irrelevant while max_requests is 0.
   max_requests_jitter: 0
 
-  # Access log format. Deliberately omits the query string, because ?api_key=
-  # is an accepted authentication method and this file is world-readable.
+  # Access log format. Deliberately omits the query string: the default format
+  # logs the whole request line, and this log is not a place for anything a
+  # caller passes as a parameter.
   access_log_format: '%(h)s "%(m)s %(U)s %(H)s" %(s)s %(b)s %(D)sus'

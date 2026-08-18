@@ -4,24 +4,33 @@ Complete reference for all LXC AutoScale ML API endpoints.
 
 ## Authentication
 
-All endpoints except `/health/check` and `/metrics` require authentication.
+::: warning Disabled in the shipped configuration
+`authentication.enabled` defaults to **false**, and `server.host` defaults to
+`0.0.0.0`. Out of the box this API is reachable on every interface with no
+credential, and it runs as root. See
+[Configuration](/reference/configuration) before exposing it.
+:::
 
-**Header authentication (recommended):**
+When enabled, every endpoint except `/`, `/health/check` and `/metrics`
+requires a key, supplied in the `X-API-Key` header:
 
 ```bash
-curl -H "X-API-Key: your-key" http://localhost:5000/endpoint
+curl -H "X-API-Key: your-key" http://localhost:5000/resource/lxc/status?lxc_id=104
 ```
 
-**Query parameter authentication:**
+The `?api_key=` query-parameter form was removed: gunicorn's access log records
+the request line, so the key ended up in a log file, in shell history, and in
+any proxy log in front of the API.
 
-```bash
-curl "http://localhost:5000/endpoint?api_key=your-key"
-```
+If you enable authentication, set `api.api_key` in the **model** configuration
+to a matching value. The model has no other way to authenticate, and without it
+autoscaling stops with a 401 on every call.
 
 ## Endpoints Summary
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
+| `/` | GET | No | Self-documenting index |
 | `/health/check` | GET | No | API health status |
 | `/metrics` | GET | No | Prometheus metrics |
 | `/routes` | GET | Yes | List all routes |
@@ -54,8 +63,10 @@ working without changes:
 | `new_lxc_id` | `new_vm_id` |
 | `new_lxc_name` | `new_vm_name`, `hostname` |
 
-Every endpoint accepts its parameters from either a JSON body or the query
-string, whichever is more convenient.
+**GET** endpoints take their parameters from the query string. **POST** and
+**DELETE** endpoints require a JSON body: accepting the query string on
+mutating methods made them drivable by a cross-origin HTML form, which is a
+CORS simple request and needs no preflight.
 
 ---
 

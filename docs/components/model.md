@@ -9,7 +9,7 @@ The Model component is the ML engine that analyzes container metrics and makes s
 | Service | `lxc_autoscale_ml` |
 | Configuration | `/etc/lxc_autoscale_ml/lxc_autoscale_ml.yaml` |
 | Log File | `/var/log/lxc_autoscale_ml.log` |
-| Lock File | `/var/lock/lxc_autoscale_ml.lock` |
+| Lock File | `/run/lxc_autoscale_ml.lock` |
 
 ## Features
 
@@ -88,7 +88,7 @@ Resources scale gradually to avoid instability.
 ```
 Scale UP if:
   - IsolationForest detects anomaly (-1)
-  - CPU usage > cpu_scale_up_threshold (default 70%)
+  - CPU usage > cpu_scale_up_threshold (default 75%)
   - Current cores < max_cpu_cores
 
 Scale DOWN if:
@@ -104,12 +104,12 @@ Step size: cpu_scale_step (default 1 core)
 ```
 Scale UP if:
   - IsolationForest detects anomaly (-1)
-  - RAM usage % > ram_scale_up_threshold (default 80%)
+  - RAM usage % > ram_scale_up_threshold (default 75%)
   - Current RAM < max_ram_mb
 
 Scale DOWN if:
   - IsolationForest reports normal (1)
-  - RAM usage % < ram_scale_down_threshold (default 40%)
+  - RAM usage % < ram_scale_down_threshold (default 30%)
   - Current RAM > min_ram_mb
 
 Step size: ram_scale_step_mb (default 512 MB)
@@ -320,8 +320,8 @@ curl http://127.0.0.1:5000/health/check
 
 ```bash
 # Check if process is running
-cat /var/lock/lxc_autoscale_ml.lock
-ps -p $(cat /var/lock/lxc_autoscale_ml.lock)
+cat /run/lxc_autoscale_ml.lock
+ps -p $(cat /run/lxc_autoscale_ml.lock)
 
 # If not running, restart service (auto-cleans stale lock)
 systemctl restart lxc_autoscale_ml

@@ -240,7 +240,7 @@ grep -A2 "authentication" /etc/lxc_autoscale_ml/lxc_autoscale_api.yaml
 curl -H "X-API-Key: your-key" http://localhost:5000/routes
 
 # Alternative (query parameter)
-curl "http://localhost:5000/routes?api_key=your-key"
+curl -H "X-API-Key: your-key" http://localhost:5000/routes
 ```
 
 ### Lock File Issues
@@ -251,14 +251,14 @@ Version 2.0 includes automatic stale lock cleanup. If the issue persists:
 
 ```bash
 # Check if process is running
-cat /var/lock/lxc_autoscale_ml.lock
-ps -p $(cat /var/lock/lxc_autoscale_ml.lock)
+cat /run/lxc_autoscale_ml.lock
+ps -p $(cat /run/lxc_autoscale_ml.lock)
 
 # If process not running, service auto-cleans
 systemctl restart lxc_autoscale_ml
 
 # Manual cleanup (if needed)
-rm /var/lock/lxc_autoscale_ml.lock
+rm /run/lxc_autoscale_ml.lock
 systemctl start lxc_autoscale_ml
 ```
 

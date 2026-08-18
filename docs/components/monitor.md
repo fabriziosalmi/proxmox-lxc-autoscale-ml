@@ -248,7 +248,7 @@ host CPU during collection.
 
 ## Log Rotation
 
-Create `/etc/logrotate.d/lxc_monitor`:
+Create `/etc/logrotate.d/lxc-autoscale-api`:
 
 ```
 /var/log/lxc_monitor.log {

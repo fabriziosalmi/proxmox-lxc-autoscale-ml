@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-Documentation and shipped configuration brought in line with the code, and
-guarded so they cannot drift apart again.
+Documentation and shipped configuration brought in line with the code, with
+contract tests covering several classes of drift. Those tests check that
+documented endpoints, metric names, systemd unit names, configuration keys,
+declared default *values*, filesystem paths and the stated Python range match
+what ships; and that no runnable example uses a removed feature. They do **not**
+check response bodies, log strings, prose descriptions of behaviour, or
+consistency between pages -- those remain reviewed by hand.
 
 - **`authentication.api_key` never existed.** The getting-started guide, the
   installation guide, the upgrade guide and the API component page all told
@@ -53,11 +58,13 @@ guarded so they cannot drift apart again.
 
 ### Added
 
-- `tests/test_config_contract.py` and `tests/test_docs_contract.py`: 40 tests
-  that fail if a configuration file grows a key no code reads, if the docs
-  document a setting or endpoint or metric that does not exist, if a YAML
-  example anywhere in the docs uses an unknown key, if a systemd unit points at
-  a file the installer never places, or if emoji or the banned claims come back.
+- `tests/test_config_contract.py` and `tests/test_docs_contract.py`: contract
+  tests that fail if a configuration file grows a key no code reads, if the docs
+  document a setting or endpoint or metric that does not exist, if a documented
+  default disagrees with the shipped file, if a documented path is one the
+  deployment never creates, if a YAML example anywhere uses an unknown key, if a
+  systemd unit points at a file the installer never places, or if emoji or the
+  banned claims come back.
 
 ## [1.3.0] - 2026-08-17
 
