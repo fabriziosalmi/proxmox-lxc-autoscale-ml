@@ -5,9 +5,9 @@ import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timezone
 from logging.handlers import RotatingFileHandler
-from subprocess import CalledProcessError, check_output
+from subprocess import CalledProcessError, TimeoutExpired, check_output
 from typing import Any
 
 import aiofiles
@@ -38,6 +38,12 @@ class Settings:
     retry_limit = 3
     retry_delay = 2
     max_metrics_entries = 1000
+    # Every `pct` call is bounded. Without this a single wedged container or a
+    # pmxcfs stall froze the collection cycle forever: the process neither
+    # exited nor errored, so Restart=on-failure never fired and the export file
+    # was never rewritten again. An outer asyncio.wait_for does not help --
+    # executor.shutdown(wait=True) still joins the stuck thread.
+    command_timeout = 30
 
 
 settings = Settings()
@@ -98,12 +104,30 @@ def configure(config: dict) -> None:
     settings.retry_delay = monitoring.get('retry_delay', Settings.retry_delay)
     settings.max_metrics_entries = monitoring.get(
         'max_metrics_entries', Settings.max_metrics_entries)
+    settings.command_timeout = monitoring.get('command_timeout', Settings.command_timeout)
+
+
+def forget_departed_containers(current: list[str]) -> None:
+    """Drop CPU history for containers that are no longer running.
+
+    The cache was never pruned, so it grew for the process lifetime -- and,
+    because Proxmox reuses VMIDs, a recycled ID inherited its predecessor's
+    counters and produced a nonsense first delta.
+    """
+    for container_id in set(_previous_cpu_sample) - set(current):
+        del _previous_cpu_sample[container_id]
 
 
 def get_running_lxc_containers() -> list[str]:
     """Retrieve the IDs of running LXC containers."""
     try:
-        output = check_output(['pct', 'list'], text=True).splitlines()  # noqa: S603, S607
+        output = check_output(  # noqa: S603, S607
+            ['pct', 'list'], text=True, timeout=settings.command_timeout).splitlines()
+    except TimeoutExpired:
+        logger.error(
+            f"`pct list` did not return within {settings.command_timeout}s; "
+            f"skipping this cycle.")
+        return []
     except (CalledProcessError, OSError) as e:
         logger.error(f"Error retrieving LXC containers: {e}")
         return []
@@ -118,13 +142,21 @@ def get_running_lxc_containers() -> list[str]:
     return containers
 
 
-def run_command(command: list[str]) -> str | None:
-    """Run a command and return its stdout, or None if it failed."""
+def run_command(command: list[str]) -> str:
+    """Run a command and return its stdout.
+
+    Raises RuntimeError on failure rather than returning None. Swallowing the
+    error here made `retry_on_failure` dead code -- it can only retry what
+    raises -- so a transient `pct exec` failure was recorded as a zero for the
+    rest of the cycle instead of being retried.
+    """
     try:
-        return check_output(command, text=True)  # noqa: S603
+        return check_output(command, text=True, timeout=settings.command_timeout)  # noqa: S603
+    except TimeoutExpired as e:
+        raise RuntimeError(
+            f"`{' '.join(command)}` exceeded {settings.command_timeout}s") from e
     except (CalledProcessError, OSError) as e:
-        logger.error(f"Command failed: {' '.join(command)}, error: {e}")
-        return None
+        raise RuntimeError(f"`{' '.join(command)}` failed: {e}") from e
 
 
 async def retry_on_failure(func: Any, *args, **kwargs) -> Any:
@@ -152,47 +184,56 @@ async def get_container_metric(command: list[str], executor: ThreadPoolExecutor)
 
 
 async def parse_meminfo(container_id: str, executor: ThreadPoolExecutor) -> dict[str, float]:
-    """Retrieve memory and swap usage inside the container."""
-    fields = [('MemTotal', 'memory_total_mb'), ('MemAvailable', 'memory_available_mb')]
-    if settings.enable_swap:
-        fields += [('SwapTotal', 'swap_total_mb'), ('SwapFree', 'swap_free_mb')]
+    """Retrieve memory and swap usage inside the container.
 
-    mem_info: dict[str, float] = {}
-    for metric, key in fields:
-        command = ['pct', 'exec', container_id, '--', 'grep', f'^{metric}:', '/proc/meminfo']
-        result = await get_container_metric(command, executor)
-        if not result:
+    One `cat /proc/meminfo` rather than one `grep` per field. Each `pct exec`
+    is a full PVE Perl startup plus an nsenter, so the previous four-greps
+    version cost four of those to read a single file -- on a 30-container node,
+    120 forks a minute for the memory figures alone.
+    """
+    result = await get_container_metric(
+        ['pct', 'exec', container_id, '--', 'cat', '/proc/meminfo'], executor)
+
+    fields: dict[str, float] = {}
+    for line in (result or "").splitlines():
+        key, separator, rest = line.partition(":")
+        if not separator:
             continue
-        parts = result.split()
-        if len(parts) < 2:
-            logger.warning(f"Unexpected memory info format for container {container_id}: {result}")
+        parts = rest.split()
+        if not parts:
             continue
         try:
-            mem_info[key] = int(parts[1]) / 1024  # kB -> MB
+            fields[key.strip()] = int(parts[0]) / 1024  # kB -> MB
         except ValueError:
-            logger.warning(f"Unexpected memory info format for container {container_id}: {result}")
+            continue
+
+    mem_info: dict[str, float] = {}
+    if "MemTotal" in fields:
+        mem_info["memory_total_mb"] = fields["MemTotal"]
+    if "MemAvailable" in fields:
+        mem_info["memory_available_mb"] = fields["MemAvailable"]
 
     # Without MemAvailable the old code reported the container's entire memory
     # as used, which reads as sustained pressure and drives constant scale-up.
-    if 'memory_total_mb' in mem_info and 'memory_available_mb' in mem_info:
-        mem_info['memory_usage_mb'] = max(
-            0.0, mem_info['memory_total_mb'] - mem_info['memory_available_mb'])
+    if "memory_total_mb" in mem_info and "memory_available_mb" in mem_info:
+        mem_info["memory_usage_mb"] = max(
+            0.0, mem_info["memory_total_mb"] - mem_info["memory_available_mb"])
     else:
         logger.warning(
             f"Incomplete memory info for container {container_id}; reporting 0 MB used")
-        mem_info['memory_usage_mb'] = 0.0
+        mem_info["memory_usage_mb"] = 0.0
 
-    if 'swap_total_mb' in mem_info and 'swap_free_mb' in mem_info:
-        mem_info['swap_usage_mb'] = max(
-            0.0, mem_info['swap_total_mb'] - mem_info['swap_free_mb'])
+    if settings.enable_swap and "SwapTotal" in fields and "SwapFree" in fields:
+        mem_info["swap_total_mb"] = fields["SwapTotal"]
+        mem_info["swap_usage_mb"] = max(0.0, fields["SwapTotal"] - fields["SwapFree"])
     else:
-        mem_info.setdefault('swap_total_mb', 0.0)
-        mem_info['swap_usage_mb'] = 0.0
+        mem_info.setdefault("swap_total_mb", 0.0)
+        mem_info["swap_usage_mb"] = 0.0
 
     return mem_info
 
 
-async def get_container_cpu_usage(container_id: str, executor: ThreadPoolExecutor) -> float:
+async def get_container_cpu_usage(container_id: str, executor: ThreadPoolExecutor) -> float | None:
     """
     CPU usage of the container over the interval since the previous sample.
 
@@ -202,8 +243,8 @@ async def get_container_cpu_usage(container_id: str, executor: ThreadPoolExecuto
     autoscaler was reacting to a number that had almost nothing to do with
     current load. Two readings are differenced instead.
 
-    The first reading for a container has nothing to compare against and falls
-    back to the since-boot average.
+    Returns None for the first reading of a container, which has no interval
+    to measure.
     """
     command = ['pct', 'exec', container_id, '--', 'grep', '^cpu ', '/proc/stat']
     result = await get_container_metric(command, executor)
@@ -230,11 +271,16 @@ async def get_container_cpu_usage(container_id: str, executor: ThreadPoolExecuto
     _previous_cpu_sample[container_id] = (idle_time, total_time)
 
     if previous is None:
+        # Returning the since-boot average here reintroduced, for one cycle,
+        # exactly the bug the delta was written to fix -- and that fabricated
+        # sample then entered the training history permanently. It happens
+        # every time the monitor restarts, for every container. Report nothing
+        # instead; the next cycle has a real delta.
         logger.debug(
-            f"No previous CPU sample for container {container_id}; "
-            f"reporting the since-boot average for this cycle"
+            f"First CPU sample for container {container_id}; no interval to "
+            f"measure yet, skipping this cycle."
         )
-        return 100.0 * (1 - (idle_time / total_time))
+        return None
 
     previous_idle, previous_total = previous
     idle_delta = idle_time - previous_idle
@@ -250,7 +296,17 @@ async def get_container_cpu_usage(container_id: str, executor: ThreadPoolExecuto
 
 
 async def get_container_io_stats(container_id: str, executor: ThreadPoolExecutor) -> dict[str, int]:
-    """Retrieve I/O statistics inside the container."""
+    """Retrieve I/O statistics inside the container.
+
+    Note on units: fields 5 and 9 of /proc/diskstats are sectors read and
+    written, not completed operations, so "reads"/"writes" here are sector
+    counts. The names are kept because data_manager reads them, and a tree
+    ensemble behind a scaler is invariant to the constant factor.
+
+    /proc/diskstats is also not namespaced, so these reflect the HOST's disks
+    rather than the container's. Reading the cgroup io.stat instead would fix
+    that, but it changes what the metric means.
+    """
     command = ['pct', 'exec', container_id, '--', 'cat', '/proc/diskstats']
     result = await get_container_metric(command, executor)
     if not result:
@@ -364,9 +420,20 @@ async def collect_metrics_for_container(container_id: str, executor: ThreadPoolE
     memory_swap_usage = memory_swap_usage or {}
     filesystem_usage = filesystem_usage or dict(EMPTY_FILESYSTEM_STATS)
 
+    if cpu_usage is None:
+        # No interval measured yet (first sample after a restart, or the probe
+        # gave up). Recording 0.0 would look like an idle container and drive a
+        # scale-down; the model is better served by the container simply being
+        # absent from this cycle.
+        logger.info(
+            f"No CPU reading for container {container_id} this cycle; omitting it.")
+        return container_id, None
+
     container_metrics = {
-        "timestamp": datetime.now().isoformat(),
-        "cpu_usage_percent": cpu_usage if cpu_usage is not None else 0.0,
+        # Timezone-aware: naive local timestamps went backwards for an hour at
+        # the DST fall-back, and `time_diff` is a training feature.
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "cpu_usage_percent": cpu_usage,
         "memory_usage_mb": memory_swap_usage.get("memory_usage_mb", 0.0),
         "swap_usage_mb": memory_swap_usage.get("swap_usage_mb", 0.0),
         "swap_total_mb": memory_swap_usage.get("swap_total_mb", 0.0),
@@ -385,7 +452,7 @@ async def collect_metrics_for_container(container_id: str, executor: ThreadPoolE
 
 async def collect_and_export_metrics():
     """Collect and export metrics for all running LXC containers."""
-    start_time = datetime.now()
+    start_time = datetime.now(timezone.utc)
     metrics = {}
     containers = get_running_lxc_containers()
 
@@ -394,6 +461,7 @@ async def collect_and_export_metrics():
         return
 
     logger.debug(f"Found {len(containers)} running containers.")
+    forget_departed_containers(containers)
 
     executor = ThreadPoolExecutor(max_workers=settings.max_workers)
     try:
@@ -417,13 +485,15 @@ async def collect_and_export_metrics():
             logger.error(f"Failed to collect metrics for container {container_id}: {result}")
             continue
         collected_id, container_metrics = result
+        if container_metrics is None:
+            continue
         metrics[collected_id] = container_metrics
 
     if not metrics:
         logger.error("No container metrics were collected this cycle.")
         return
 
-    end_time = datetime.now()
+    end_time = datetime.now(timezone.utc)
     metrics["summary"] = {
         "collection_start_time": start_time.isoformat(),
         "collection_end_time": end_time.isoformat(),
@@ -476,8 +546,17 @@ async def write_metrics_to_file(file_path: str, data: list[dict[str, Any]]):
 
     temp_file = f"{file_path}.tmp"
     try:
+        # Compact separators, no indent, no key sorting. This file is rewritten
+        # in full every cycle: at 20 containers x 1000 retained cycles the
+        # pretty-printed form was ~12.7 MB per write, roughly 18 GB a day onto
+        # the Proxmox root volume, and indentation alone accounted for about
+        # 5.5 MB of it. Nothing reads this by eye.
         async with aiofiles.open(temp_file, mode='w') as json_file:
-            await json_file.write(json.dumps(data, indent=4, sort_keys=True))
+            await json_file.write(json.dumps(data, separators=(',', ':')))
+            await json_file.flush()
+            os.fsync(json_file.fileno())
+        # os.replace is atomic, but without the fsync above the rename could
+        # land ahead of the data after a host crash.
         os.replace(temp_file, file_path)
         logger.info(f"Metrics successfully exported to {file_path} ({len(data)} entries)")
     except OSError as e:

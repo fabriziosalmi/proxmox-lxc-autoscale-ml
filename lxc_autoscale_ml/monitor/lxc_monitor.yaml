@@ -41,6 +41,12 @@ monitoring:
   
   # Delay between retry attempts in seconds.
   retry_delay: 2
+
+  # Timeout in seconds for each pct invocation. Without a bound, one wedged
+  # container froze the whole collection cycle indefinitely: the process
+  # neither exited nor errored, so systemd never restarted it and the metrics
+  # file was never updated again.
+  command_timeout: 30
   
   # Maximum number of metrics entries to keep in the export file (prevents unbounded growth).
   max_metrics_entries: 1000  # Keeps last 1000 data points (~16 hours at 60s intervals)
