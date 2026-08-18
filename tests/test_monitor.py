@@ -1,6 +1,7 @@
 """Tests for the metrics collector."""
 import asyncio
 import json
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
@@ -36,7 +37,9 @@ def pct_exec(monkeypatch):
         for key, value in outputs.items():
             if key in command:
                 return value() if callable(value) else value
-        return None
+        # run_command raises on failure so retry_on_failure can do its job;
+        # returning None here would hide that contract from the tests.
+        raise RuntimeError(f"no stub for {' '.join(command)}")
 
     monkeypatch.setattr(lxc_monitor, "run_command", fake_run_command)
     return outputs
@@ -114,19 +117,20 @@ class TestContainerListing:
 
 
 class TestCpuUsage:
-    def test_first_sample_falls_back_to_the_since_boot_average(self, pct_exec, executor):
-        # 25 idle out of 100 total -> 75% since boot.
+    def test_the_first_sample_reports_nothing(self, pct_exec, executor):
+        """It used to return the since-boot average -- reintroducing, for one
+        cycle, the exact bug the delta was written to fix, and writing that
+        fabricated sample into the training history permanently. It happens on
+        every monitor restart, for every container."""
         pct_exec["/proc/stat"] = stat_line(idle=25, other=75)
-        usage = asyncio.run(lxc_monitor.get_container_cpu_usage("104", executor))
-        assert usage == pytest.approx(75.0)
+        assert asyncio.run(lxc_monitor.get_container_cpu_usage("104", executor)) is None
 
     def test_second_sample_measures_only_the_interval(self, pct_exec, executor):
         """/proc/stat holds since-boot counters. Deriving usage from a single
         reading reports the container's lifetime average, not current load."""
         # Long-idle container: 10 busy, 990 idle since boot (1% average).
         pct_exec["/proc/stat"] = stat_line(idle=990, other=10)
-        first = asyncio.run(lxc_monitor.get_container_cpu_usage("104", executor))
-        assert first == pytest.approx(1.0)
+        assert asyncio.run(lxc_monitor.get_container_cpu_usage("104", executor)) is None
 
         # In the last interval it was fully busy: +100 busy, +0 idle.
         pct_exec["/proc/stat"] = stat_line(idle=990, other=110)
@@ -145,8 +149,11 @@ class TestCpuUsage:
         # A different container has no history yet and must not reuse 104's.
         assert "105" not in lxc_monitor._previous_cpu_sample
         pct_exec["/proc/stat"] = stat_line(idle=50, other=150)
+        assert asyncio.run(lxc_monitor.get_container_cpu_usage("105", executor)) is None
+        # ...and now it has its own baseline.
+        pct_exec["/proc/stat"] = stat_line(idle=50, other=250)
         assert asyncio.run(
-            lxc_monitor.get_container_cpu_usage("105", executor)) == pytest.approx(75.0)
+            lxc_monitor.get_container_cpu_usage("105", executor)) == pytest.approx(100.0)
 
     def test_counter_reset_after_a_restart_is_handled(self, pct_exec, executor):
         pct_exec["/proc/stat"] = stat_line(idle=1000, other=1000)
@@ -167,33 +174,43 @@ class TestCpuUsage:
 
 
 class TestMemory:
+    MEMINFO = (
+        "MemTotal:       2097152 kB\n"
+        "MemFree:         524288 kB\n"
+        "MemAvailable:   1048576 kB\n"
+        "SwapTotal:       524288 kB\n"
+        "SwapFree:        524288 kB\n"
+    )
+
     def test_usage_is_total_minus_available(self, pct_exec, executor):
-        pct_exec["/proc/meminfo"] = lambda: TestMemory.meminfo.pop(0)
-        TestMemory.meminfo = [
-            "MemTotal:       2097152 kB\n",
-            "MemAvailable:   1048576 kB\n",
-            "SwapTotal:       524288 kB\n",
-            "SwapFree:        524288 kB\n",
-        ]
+        pct_exec["/proc/meminfo"] = self.MEMINFO
         info = asyncio.run(lxc_monitor.parse_meminfo("104", executor))
         assert info["memory_usage_mb"] == pytest.approx(1024.0)
         assert info["swap_usage_mb"] == pytest.approx(0.0)
 
+    def test_the_whole_file_is_read_with_one_command(self, pct_exec, executor, monkeypatch):
+        """Four `grep` calls meant four full PVE Perl startups plus nsenter to
+        read one file -- 120 forks a minute on a 30-container node."""
+        seen = []
+        monkeypatch.setattr(lxc_monitor, "run_command",
+                            lambda cmd: (seen.append(cmd), self.MEMINFO)[1])
+        asyncio.run(lxc_monitor.parse_meminfo("104", executor))
+        assert len(seen) == 1
+        assert seen[0][-2:] == ["cat", "/proc/meminfo"]
+
     def test_missing_available_does_not_report_everything_as_used(self, pct_exec, executor):
         """Previously MemTotal minus a missing MemAvailable reported the whole
         allocation as used, which reads as pressure and drives scale-up."""
-        pct_exec["/proc/meminfo"] = lambda: TestMemory.meminfo.pop(0)
-        TestMemory.meminfo = ["MemTotal: 2097152 kB\n", "", "", ""]
+        pct_exec["/proc/meminfo"] = "MemTotal:       2097152 kB\n"
         info = asyncio.run(lxc_monitor.parse_meminfo("104", executor))
         assert info["memory_usage_mb"] == 0.0
 
     def test_swap_can_be_disabled(self, pct_exec, executor):
         lxc_monitor.settings.enable_swap = False
-        pct_exec["/proc/meminfo"] = lambda: TestMemory.meminfo.pop(0)
-        TestMemory.meminfo = ["MemTotal: 2097152 kB\n", "MemAvailable: 1048576 kB\n"]
+        pct_exec["/proc/meminfo"] = self.MEMINFO  # swap present in the file
         info = asyncio.run(lxc_monitor.parse_meminfo("104", executor))
         assert info["swap_usage_mb"] == 0.0
-        assert TestMemory.meminfo == []  # swap was never queried
+        assert info["swap_total_mb"] == 0.0
 
 
 class TestResilience:
@@ -231,13 +248,26 @@ class TestResilience:
         assert "104" not in written[0]
         assert written[0]["summary"]["collected_containers"] == 1
 
-    def test_metrics_record_is_complete_even_when_probes_fail(self, monkeypatch, executor):
-        """Consumers index these keys directly; a None from a failed retry used
-        to reach the record."""
+    def test_a_container_with_no_cpu_reading_is_omitted(self, monkeypatch, executor):
+        """Recording 0.0 would look like an idle container and drive a
+        scale-down. Absence is the honest answer."""
         async def give_up(*args, **kwargs):
             return None
 
         monkeypatch.setattr(lxc_monitor, "retry_on_failure", give_up)
+        container_id, metrics = asyncio.run(
+            lxc_monitor.collect_metrics_for_container("104", executor))
+        assert (container_id, metrics) == ("104", None)
+
+    def test_the_record_is_complete_when_only_secondary_probes_fail(
+            self, monkeypatch, executor):
+        """Consumers index these keys directly."""
+        async def partial(func, *args, **kwargs):
+            if func is lxc_monitor.get_container_cpu_usage:
+                return 12.5
+            return None
+
+        monkeypatch.setattr(lxc_monitor, "retry_on_failure", partial)
         _, metrics = asyncio.run(lxc_monitor.collect_metrics_for_container("104", executor))
         for key in ["cpu_usage_percent", "memory_usage_mb", "swap_usage_mb",
                     "swap_total_mb", "process_count", "io_stats", "network_usage",
@@ -282,3 +312,97 @@ class TestExport:
         asyncio.run(lxc_monitor.write_metrics_to_file(str(export_file), [{"a": 1}]))
         assert json.loads(export_file.read_text()) == [{"a": 1}]
         assert not (tmp_path / "metrics.json.tmp").exists()
+
+
+class TestCommandTimeouts:
+    """A wedged container used to freeze the collection cycle forever: the
+    process neither exited nor errored, so Restart=on-failure never fired and
+    the export file was never rewritten again."""
+
+    def test_pct_list_is_bounded(self, monkeypatch):
+
+        seen = {}
+
+        def fake(cmd, **kwargs):
+            seen.update(kwargs)
+            return "VMID Status\n104 running\n"
+
+        monkeypatch.setattr(lxc_monitor, "check_output", fake)
+        lxc_monitor.get_running_lxc_containers()
+        assert seen.get("timeout") == lxc_monitor.settings.command_timeout
+
+    def test_a_hung_pct_list_does_not_wedge_the_cycle(self, monkeypatch):
+        from subprocess import TimeoutExpired
+
+        def hang(cmd, **kwargs):
+            raise TimeoutExpired(cmd, kwargs.get("timeout", 30))
+
+        monkeypatch.setattr(lxc_monitor, "check_output", hang)
+        assert lxc_monitor.get_running_lxc_containers() == []
+
+    def test_container_probes_are_bounded(self, monkeypatch):
+        seen = {}
+
+        def fake(cmd, **kwargs):
+            seen.update(kwargs)
+            return "ok"
+
+        monkeypatch.setattr(lxc_monitor, "check_output", fake)
+        lxc_monitor.run_command(["pct", "exec", "104", "--", "cat", "/proc/meminfo"])
+        assert seen.get("timeout") == lxc_monitor.settings.command_timeout
+
+    def test_a_hung_probe_raises_so_the_retry_can_see_it(self, monkeypatch):
+        from subprocess import TimeoutExpired
+
+        def hang(cmd, **kwargs):
+            raise TimeoutExpired(cmd, 30)
+
+        monkeypatch.setattr(lxc_monitor, "check_output", hang)
+        with pytest.raises(RuntimeError, match="exceeded"):
+            lxc_monitor.run_command(["pct", "exec", "104", "--", "true"])
+
+    def test_the_timeout_is_configurable(self):
+        lxc_monitor.configure({"monitoring": {"command_timeout": 7}})
+        assert lxc_monitor.settings.command_timeout == 7
+
+
+class TestDepartedContainerCache:
+    def test_history_for_a_departed_container_is_dropped(self):
+        """The cache grew for the process lifetime, and a reused VMID inherited
+        its predecessor's counters."""
+        lxc_monitor._previous_cpu_sample.update({"104": (1, 2), "105": (3, 4)})
+        lxc_monitor.forget_departed_containers(["104"])
+        assert set(lxc_monitor._previous_cpu_sample) == {"104"}
+
+    def test_a_reused_vmid_starts_from_scratch(self, pct_exec, executor):
+        pct_exec["/proc/stat"] = stat_line(idle=1000, other=1000)
+        asyncio.run(lxc_monitor.get_container_cpu_usage("104", executor))
+        lxc_monitor.forget_departed_containers([])          # 104 destroyed
+        pct_exec["/proc/stat"] = stat_line(idle=10, other=10)  # new CT, same id
+        assert asyncio.run(lxc_monitor.get_container_cpu_usage("104", executor)) is None
+
+
+class TestExportFormat:
+    def test_the_file_is_written_compactly(self, tmp_path):
+        """Rewritten in full every cycle: at 20 containers x 1000 retained
+        cycles the pretty-printed form was ~12.7 MB per write."""
+        export = tmp_path / "metrics.json"
+        payload = [{"104": {"cpu_usage_percent": 1.0, "io_stats": {"reads": 1}}}]
+        asyncio.run(lxc_monitor.write_metrics_to_file(str(export), payload))
+        text = export.read_text()
+        assert "\n" not in text
+        assert ", " not in text
+        assert json.loads(text) == payload
+
+    def test_timestamps_carry_a_timezone(self, monkeypatch, executor):
+        """Naive local timestamps go backwards for an hour at the DST fall-back,
+        and time_diff is a training feature."""
+        async def probe(func, *args, **kwargs):
+            if func is lxc_monitor.get_container_cpu_usage:
+                return 10.0
+            return None
+
+        monkeypatch.setattr(lxc_monitor, "retry_on_failure", probe)
+        _, metrics = asyncio.run(lxc_monitor.collect_metrics_for_container("104", executor))
+        parsed = datetime.fromisoformat(metrics["timestamp"])
+        assert parsed.tzinfo is not None
