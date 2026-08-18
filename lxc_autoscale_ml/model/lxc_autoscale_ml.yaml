@@ -83,7 +83,12 @@ interval_seconds: 600  # Time interval between consecutive script runs in second
 circuit_breaker:
   enabled: true  # Stop calling the API for a container after repeated failures
   failure_threshold: 3  # Consecutive failures before the circuit opens
-  timeout_seconds: 300  # How long the circuit stays open before retrying
+  # How long the circuit stays open before retrying. This MUST be longer than
+  # interval_seconds: the breaker is consulted once per container per cycle, so
+  # a window shorter than the interval has always expired by the time it is
+  # asked and blocks nothing. At the shipped 600s interval, 300s blocked zero
+  # calls in ten consecutive failing cycles.
+  timeout_seconds: 1800
 
 # Ignored Containers
 # Container IDs to exclude from autoscaling. An empty list scales everything.

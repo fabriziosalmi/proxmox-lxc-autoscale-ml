@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 
 from data_manager import load_data, preprocess_data
-from model import DECISION_SCORE_SCALE, predict_anomalies, score_to_confidence, train_anomaly_models
+from model import predict_anomalies, score_to_confidence, train_anomaly_models
 
 
 BASE_CONFIG = {
@@ -136,24 +136,59 @@ class TestPreprocessing:
 
 
 class TestConfidence:
+    """Confidence is the percentile of a sample's distance from the decision
+    boundary among the distances seen during training.
+
+    Two earlier definitions were wrong in opposite directions: `(1 - score)*100`
+    produced 50-150%, and dividing by a hard-coded 0.5 assumed a spread about
+    four times the real one, capping confidence near 27% -- so any
+    `min_confidence` above that silently disabled all scaling, and the
+    documented "cautious" preset used 80.
+    """
+
+    TRAINING = np.linspace(0.0, 0.14, 100)
+
     def test_is_bounded_to_a_percentage(self):
-        """The old formula was (1 - score) * 100: roughly 50-150%, so it could
-        never be compared against a percentage threshold."""
         for score in [-10, -0.5, -0.1, 0, 0.1, 0.5, 10]:
-            assert 0.0 <= score_to_confidence(score) <= 100.0
+            assert 0.0 <= score_to_confidence(score, self.TRAINING) <= 100.0
 
-    def test_boundary_scores_are_zero_confidence(self):
-        assert score_to_confidence(0.0) == 0.0
+    def test_the_whole_range_is_reachable(self):
+        """The point of the fix: a threshold of 80 must be attainable."""
+        assert score_to_confidence(self.TRAINING.max(), self.TRAINING) == 100.0
+        assert score_to_confidence(0.0, self.TRAINING) > 0.0
+        high = score_to_confidence(np.percentile(self.TRAINING, 90), self.TRAINING)
+        assert high >= 80.0, "a documented min_confidence of 80 must be reachable"
 
-    def test_confidence_grows_with_distance_from_the_boundary(self):
-        assert score_to_confidence(0.1) < score_to_confidence(0.3) < score_to_confidence(0.5)
+    def test_it_is_a_percentile_of_the_training_distribution(self):
+        median = float(np.median(self.TRAINING))
+        assert score_to_confidence(median, self.TRAINING) == pytest.approx(50.0, abs=2.0)
 
-    def test_is_symmetric_around_the_boundary(self):
-        assert score_to_confidence(-0.2) == score_to_confidence(0.2)
+    def test_it_grows_with_distance_from_the_boundary(self):
+        values = [score_to_confidence(s, self.TRAINING) for s in (0.01, 0.05, 0.12)]
+        assert values == sorted(values)
 
-    def test_saturates_at_the_scale(self):
-        assert score_to_confidence(DECISION_SCORE_SCALE) == 100.0
-        assert score_to_confidence(DECISION_SCORE_SCALE * 5) == 100.0
+    def test_it_is_symmetric_around_the_boundary(self):
+        assert (score_to_confidence(-0.05, self.TRAINING)
+                == score_to_confidence(0.05, self.TRAINING))
+
+    def test_without_a_reference_distribution_it_reports_nothing(self):
+        """Rather than a number that cannot be compared against a threshold."""
+        assert score_to_confidence(0.5, None) == 0.0
+        assert score_to_confidence(0.5, []) == 0.0
+
+    def test_a_trained_model_can_produce_a_high_confidence(self, metrics_file):
+        """End to end, against a real fitted pipeline -- the property the
+        hard-coded scale broke."""
+        df = preprocess_data(load_data(metrics_file(cycles=40)), BASE_CONFIG)
+        model, features = train_anomaly_models(df, BASE_CONFIG)
+        confidences = [
+            predict_anomalies(model, df.iloc[i], features, BASE_CONFIG)[1]
+            for i in range(len(df))
+        ]
+        assert max(confidences) >= 90.0, (
+            f"the model cannot express confidence above {max(confidences):.0f}%, "
+            f"so any min_confidence above that disables scaling entirely"
+        )
 
 
 class TestTrainAndPredict:

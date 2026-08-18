@@ -34,7 +34,11 @@ def load_config(config_path, default_config=None):
         config = {**default_config, **config}
         logging.debug("Configuration merged with default values.")
 
-    required_keys = ['log_file', 'interval_seconds', 'api']
+    # `scaling` was absent from this list while evaluate_container and
+    # determine_scaling_action both index config["scaling"] directly, so a
+    # config that passed validation raised KeyError for every container, every
+    # cycle -- logged as a traceback forever while the unit reported healthy.
+    required_keys = ['log_file', 'interval_seconds', 'api', 'scaling']
     for key in required_keys:
         if key not in config:
             logging.error(f"Missing required configuration key: {key}")
@@ -62,7 +66,7 @@ def validate_scaling_config(config):
         ConfigError: If configuration is invalid
     """
     if 'scaling' not in config:
-        return  # Scaling config is optional
+        raise ConfigError("Missing required configuration section: scaling")
 
     scaling = config['scaling']
 
@@ -100,5 +104,26 @@ def validate_scaling_config(config):
 
     if scaling.get('ram_scale_step_mb', 1) <= 0:
         raise ConfigError("ram_scale_step_mb must be positive")
+
+    min_confidence = scaling.get('min_confidence', 0)
+    if not isinstance(min_confidence, (int, float)) or not (0 <= min_confidence <= 100):
+        raise ConfigError(
+            f"min_confidence must be a number between 0 and 100, got {min_confidence!r}")
+
+    # M1: the breaker is consulted once per container per cycle. If its window
+    # closes before the next cycle begins it has always expired by the time it
+    # is asked, so it blocks nothing -- with the shipped 300s window and 600s
+    # interval it blocked zero calls in ten consecutive failing cycles.
+    interval = config.get('interval_seconds', 60)
+    breaker = config.get('circuit_breaker') or {}
+    if breaker.get('enabled', True):
+        timeout = breaker.get('timeout_seconds', 300)
+        if timeout <= interval:
+            logging.warning(
+                f"circuit_breaker.timeout_seconds ({timeout}s) is not longer than "
+                f"interval_seconds ({interval}s). The breaker is consulted once per "
+                f"container per cycle, so its window will always have expired by then "
+                f"and it will never block a call. Set it above the interval."
+            )
 
     logging.info("Scaling configuration validated successfully")
