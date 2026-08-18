@@ -1,20 +1,37 @@
 [Unit]
 Description=LXC AutoScale API
 Documentation=https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 User=root
 Group=root
 Environment="PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin"
+Environment="PYTHONUNBUFFERED=1"
 WorkingDirectory=/usr/local/bin/lxc_autoscale_api/
 ExecStart=/usr/bin/gunicorn --config /usr/local/bin/lxc_autoscale_api/gunicorn_config.py
 ExecReload=/bin/kill -s HUP $MAINPID
 KillMode=mixed
 
-# Restart on failure
+# The configuration holds authentication.api_keys.
+UMask=0077
+
+# A failed start must back off. With the default RestartSec (100ms) and
+# StartLimitBurst, a persistent failure -- a missing dependency, say -- burned
+# through the burst in under a second and latched the unit `failed` rather than
+# retrying, which is how a broken install looked like a dead service with no
+# restart attempts in the journal.
 Restart=on-failure
-RestartSec=5
+RestartSec=15
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# No filesystem or privilege hardening here, deliberately. These services exist
+# to run `pct`, which manipulates container mounts, cgroups and namespaces;
+# ProtectSystem, PrivateMounts, NoNewPrivileges and friends break it. The
+# mitigation that does apply is not running the API on a public interface --
+# see server.host in lxc_autoscale_api.yaml.
 
 [Install]
 WantedBy=multi-user.target

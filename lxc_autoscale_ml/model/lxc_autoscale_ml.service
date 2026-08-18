@@ -1,19 +1,41 @@
 [Unit]
 Description=LXC AutoScale ML Service
 Documentation=https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml
-After=network.target
+After=network-online.target lxc_monitor.service lxc_autoscale_api.service
+Wants=network-online.target
+
+# The model reads the file the monitor writes and calls the API to act. It
+# tolerates both being absent -- it skips the cycle -- but starting after them
+# avoids a first cycle that can only fail.
+Wants=lxc_monitor.service lxc_autoscale_api.service
 
 [Service]
+User=root
 ExecStart=/usr/bin/python3 /usr/local/bin/lxc_autoscale_ml/lxc_autoscale_ml.py
 WorkingDirectory=/usr/local/bin/lxc_autoscale_ml
 StandardOutput=inherit
 StandardError=inherit
-Restart=on-failure
-User=root
-
-# Logging configuration
 Environment="PYTHONUNBUFFERED=1"
-EnvironmentFile=/etc/lxc_autoscale_ml/lxc_autoscale_ml.yaml
+
+# No EnvironmentFile. It used to point at lxc_autoscale_ml.yaml, but systemd
+# expects KEY=value lines and that file is YAML; the configuration is read by
+# the Python process itself.
+
+# A failed start must back off. With the default RestartSec (100ms) and
+# StartLimitBurst, a persistent failure -- a missing dependency, say -- burned
+# through the burst in under a second and latched the unit `failed` rather than
+# retrying, which is how a broken install looked like a dead service with no
+# restart attempts in the journal.
+Restart=on-failure
+RestartSec=15
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# No filesystem or privilege hardening here, deliberately. These services exist
+# to run `pct`, which manipulates container mounts, cgroups and namespaces;
+# ProtectSystem, PrivateMounts, NoNewPrivileges and friends break it. The
+# mitigation that does apply is not running the API on a public interface --
+# see server.host in lxc_autoscale_api.yaml.
 
 [Install]
 WantedBy=multi-user.target
