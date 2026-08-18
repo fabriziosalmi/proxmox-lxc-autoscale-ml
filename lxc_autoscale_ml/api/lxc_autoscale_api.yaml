@@ -10,8 +10,10 @@ server:
   port: 5000
 
 lxc:
-  # Name or IP address of the Proxmox node where LXC containers are managed.
-  node: "proxmox"  # Replace with your Proxmox node name or IP. Note: if node name or hostname won't work use IP address instead, should work as expected.
+  # Name of the Proxmox node this API manages. Informational only: every pct
+  # call is local, so this cannot point the API at a different node. Running it
+  # against another host would need pvesh, which this project does not use.
+  node: "proxmox"
   
   # Default storage location for LXC containers.
   default_storage: "local-lvm"  # Default storage location

@@ -11,7 +11,7 @@ import subprocess
 import threading
 import time
 
-from flask import current_app, jsonify
+from flask import jsonify
 
 # The health check must answer quickly even when the node is struggling.
 PROBE_TIMEOUT_SECONDS = 5
@@ -69,15 +69,12 @@ def health_check():
     checks["lxc_commands"] = {"ok": pct_ok, "detail": pct_detail}
     healthy = healthy and pct_ok
 
-    # Configuration is loaded once at startup; report whether the node the API
-    # is supposed to manage was actually configured.
-    node = current_app.config.get("LXC_NODE")
-    node_ok = bool(node)
-    checks["configuration"] = {
-        "ok": node_ok,
-        "detail": f"node={node}" if node_ok else "lxc.node is not configured",
-    }
-    healthy = healthy and node_ok
+    # There used to be a "configuration" check here asserting that `lxc.node`
+    # was set. It is stored by create_app and read by nothing -- every `pct`
+    # call is local -- so it was a truthiness test on an unused value, always
+    # true with the shipped config. Half of a health check written under the
+    # banner "a health check that cannot fail is worse than none" could not
+    # fail. Removed rather than left as decoration.
 
     if not healthy:
         failing = [name for name, check in checks.items() if not check["ok"]]

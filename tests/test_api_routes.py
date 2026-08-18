@@ -244,14 +244,16 @@ class TestOperationalEndpoints:
         assert payload["status"] == "unhealthy"
         assert payload["checks"]["lxc_commands"]["detail"] == "pct not found in PATH"
 
-    def test_health_check_flags_an_unconfigured_node(self, app, client, monkeypatch):
+    def test_health_check_has_no_check_that_cannot_fail(self, client, monkeypatch):
+        """It used to assert `lxc.node` was set -- a value create_app stores and
+        nothing reads, always true with the shipped config. Half of a health
+        check written under "a health check that cannot fail is worse than
+        none" could not fail."""
         import health_check
 
         monkeypatch.setattr(health_check, "_check_pct", lambda: (True, "ok"))
-        monkeypatch.setitem(app.config, "LXC_NODE", None)
-        response = client.get("/health/check")
-        assert response.status_code == 503
-        assert response.get_json()["checks"]["configuration"]["ok"] is False
+        checks = client.get("/health/check").get_json()["checks"]
+        assert set(checks) == {"lxc_commands"}
 
     def test_metrics_endpoint_is_registered(self, client):
         response = client.get("/metrics")

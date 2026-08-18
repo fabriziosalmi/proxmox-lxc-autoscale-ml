@@ -41,8 +41,10 @@ server:
   port: 5000
 
 lxc:
-  # Name or IP address of the Proxmox node where LXC containers are managed.
-  node: "proxmox"  # Replace with your Proxmox node name or IP. Note: if node name or hostname won't work use IP address instead, should work as expected.
+  # Name of the Proxmox node this API manages. Informational only: every pct
+  # call is local, so this cannot point the API at a different node. Running it
+  # against another host would need pvesh, which this project does not use.
+  node: "proxmox"
   
   # Default storage location for LXC containers.
   default_storage: "local-lvm"  # Default storage location
@@ -248,7 +250,12 @@ interval_seconds: 600  # Time interval between consecutive script runs in second
 circuit_breaker:
   enabled: true  # Stop calling the API for a container after repeated failures
   failure_threshold: 3  # Consecutive failures before the circuit opens
-  timeout_seconds: 300  # How long the circuit stays open before retrying
+  # How long the circuit stays open before retrying. This MUST be longer than
+  # interval_seconds: the breaker is consulted once per container per cycle, so
+  # a window shorter than the interval has always expired by the time it is
+  # asked and blocks nothing. At the shipped 600s interval, 300s blocked zero
+  # calls in ten consecutive failing cycles.
+  timeout_seconds: 1800
 
 # Ignored Containers
 # Container IDs to exclude from autoscaling. An empty list scales everything.
@@ -408,7 +415,7 @@ state. Gunicorn logs a warning at startup if `workers` is above 1.
 | `scaling.dry_run` | boolean | `false` | Log decisions without calling the API |
 | `circuit_breaker.enabled` | boolean | `true` | Stop calling the API for a container after repeated failures |
 | `circuit_breaker.failure_threshold` | integer | `3` | Consecutive failures before the circuit opens |
-| `circuit_breaker.timeout_seconds` | integer | `300` | How long it stays open |
+| `circuit_breaker.timeout_seconds` | integer | `1800` | How long it stays open. Must exceed `interval_seconds`: the breaker is consulted once per container per cycle, so a shorter window has always expired by then and blocks nothing. The model warns at startup if it does not. |
 | `ignore_lxc` | list | `[]` | Container IDs to skip. Matched as strings, so `[101]` and `["101"]` both work. |
 
 On confidence: it is the distance of the prediction from the model's decision
