@@ -9,7 +9,7 @@ The API component provides a RESTful interface for managing LXC containers on Pr
 | Service | `lxc_autoscale_api` |
 | Configuration | `/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml` |
 | Default Port | 5000 |
-| Log File | `/var/log/autoscaleapi.log` |
+| Log File | `/var/log/lxc_autoscale_api.log` |
 
 ## Features
 
@@ -31,7 +31,8 @@ All endpoints except `/health/check` and `/metrics` require authentication.
 ```yaml
 authentication:
   enabled: true
-  api_key: "your-secret-api-key"
+  api_keys:
+    - "your-secret-api-key"
 ```
 
 **Usage:**
@@ -41,7 +42,7 @@ authentication:
 curl -H "X-API-Key: your-key" http://localhost:5000/routes
 
 # Query parameter authentication
-curl "http://localhost:5000/routes?api_key=your-key"
+curl -H "X-API-Key: your-key" http://localhost:5000/routes
 ```
 
 **Error response (401 Unauthorized):**
@@ -307,7 +308,8 @@ server:
 # Authentication
 authentication:
   enabled: true
-  api_key: "your-secret-api-key"
+  api_keys:
+    - "your-secret-api-key"
 
 # Rate limiting
 rate_limiting:
@@ -317,19 +319,25 @@ rate_limiting:
 
 # Logging
 logging:
-  log_level: "INFO"
-  log_file: "/var/log/autoscaleapi.log"
-  access_log: "/var/log/autoscaleapi_access.log"
-  error_log: "/var/log/autoscaleapi_error.log"
+  level: "INFO"
+  # log_file: "/var/log/lxc_autoscale_api.log"  # unset: stdout only
+  rotate: true
+  max_log_size_mb: 100
+  backup_count: 5
+
+# HTTP access and error logs belong to gunicorn
+gunicorn:
+  access_log_file: "/var/log/lxc_autoscale_api_access.log"
+  error_log_file: "/var/log/lxc_autoscale_api_error.log"
 ```
 
 ## Log Files
 
 | File | Content |
 |------|---------|
-| `/var/log/autoscaleapi.log` | Main API logs |
-| `/var/log/autoscaleapi_access.log` | All incoming requests |
-| `/var/log/autoscaleapi_error.log` | Error logs |
+| `/var/log/lxc_autoscale_api.log` | Main API logs |
+| `/var/log/lxc_autoscale_api_access.log` | All incoming requests |
+| `/var/log/lxc_autoscale_api_error.log` | Error logs |
 
 ## HTTPS Setup
 

@@ -65,18 +65,25 @@ Currently, resource limits (min/max CPU and RAM) are global settings. All contai
 Edit `/etc/lxc_autoscale_ml/lxc_autoscale_ml.yaml`:
 
 ```yaml
-sleep_interval: 120  # Seconds between scaling cycles
+interval_seconds: 120  # Seconds between scaling cycles
 ```
 
 ## Security
 
 ### Is the API secure?
 
-Yes. Version 2.0 includes:
-- API key authentication on all sensitive endpoints
-- Rate limiting (120 requests per minute)
-- Input validation on all parameters
-- Localhost bypass for internal services
+Only if you configure it that way. The defaults are permissive:
+
+- **Authentication is off** (`authentication.enabled: false`). Turn it on and
+  add keys before exposing the API anywhere.
+- **It binds to every interface** (`server.host: 0.0.0.0`). Set `127.0.0.1`
+  unless the model runs on a different host.
+- **It runs as root**, because `pct` requires it, and speaks plain HTTP. Put TLS
+  in front of it if it has to cross a network.
+
+What is on by default: per-IP rate limiting at 120 requests a minute with
+localhost exempt, and input validation on every parameter. Commands are handed
+to the kernel as argument lists and never go through a shell.
 
 ### Where should I store my API key?
 
@@ -108,15 +115,25 @@ server {
 
 ### How many containers can it handle?
 
-The system has been tested with up to 200 containers. The batch async API client maintains consistent performance regardless of container count.
+Configuration reads are issued concurrently, up to `api.max_concurrent` at a
+time, so the fetch stage does not grow linearly with container count. The
+scaling decisions themselves are made one container at a time. No specific
+upper bound has been measured.
 
 ### What is the performance overhead?
 
-Minimal. The ML model training typically uses less than 5% CPU during training cycles. Memory usage is bounded by the metrics file size limit (default: 1000 entries, approximately 2 MB).
+The model is retrained from the full metrics file on every cycle, so cost grows
+with history length; the file is capped at `max_metrics_entries` cycles (1000 by
+default), which bounds it. The monitor records its own CPU and memory use in the
+`summary` block of each cycle, so you can read the real figures for your host
+there rather than trusting an estimate.
 
-### Why is configuration fetching 10x faster in version 2.0?
+### How are container configurations fetched?
 
-Version 2.0 uses asynchronous batch API requests. Instead of fetching container configurations sequentially, all configurations are fetched concurrently. For 60 containers, this reduces fetch time from approximately 6 seconds to 0.6 seconds.
+Concurrently, rather than one after another, with at most `api.max_concurrent`
+requests in flight (10 by default) and exponential backoff on server errors.
+Each cycle logs how long the fetch took and how many succeeded, so the real
+figure for your host is in the log.
 
 ## Troubleshooting
 

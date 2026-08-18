@@ -13,17 +13,11 @@ lxc:
   # Name or IP address of the Proxmox node where LXC containers are managed.
   node: "proxmox"  # Replace with your Proxmox node name or IP. Note: if node name or hostname won't work use IP address instead, should work as expected.
   
-  # Whether to verify SSL certificates. Set to false for local commands.
-  verify_ssl: false  # Not applicable since we are using local commands
-  
   # Default storage location for LXC containers.
   default_storage: "local-lvm"  # Default storage location
   
   # Timeout for operations in seconds.
   timeout_seconds: 10
-  
-  # Maximum number of retry attempts for operations.
-  max_retries: 3
 
 rate_limiting:
   # Enable or disable rate limiting globally
@@ -126,6 +120,7 @@ gunicorn:
   # Random spread on max_requests. Irrelevant while max_requests is 0.
   max_requests_jitter: 0
 
-  # Access log format. Deliberately omits the query string, because ?api_key=
-  # is an accepted authentication method and this file is world-readable.
+  # Access log format. Deliberately omits the query string: the default format
+  # logs the whole request line, and this log is not a place for anything a
+  # caller passes as a parameter.
   access_log_format: '%(h)s "%(m)s %(U)s %(H)s" %(s)s %(b)s %(D)sus'

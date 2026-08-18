@@ -9,13 +9,13 @@ The Model component is the ML engine that analyzes container metrics and makes s
 | Service | `lxc_autoscale_ml` |
 | Configuration | `/etc/lxc_autoscale_ml/lxc_autoscale_ml.yaml` |
 | Log File | `/var/log/lxc_autoscale_ml.log` |
-| Lock File | `/var/lock/lxc_autoscale_ml.lock` |
+| Lock File | `/run/lxc_autoscale_ml.lock` |
 
 ## Features
 
 - **IsolationForest ML Model**: Anomaly detection for resource usage
 - **Incremental Scaling**: Gradual resource adjustment
-- **Batch Async API Client**: 10x faster configuration fetching
+- **Async API client**: configuration reads issued concurrently
 - **Circuit Breaker**: Fault tolerance for API failures
 - **Stale Lock Cleanup**: Automatic recovery from crashes
 
@@ -70,11 +70,11 @@ IsolationForest is an unsupervised machine learning algorithm for anomaly detect
 ### Configuration
 
 ```yaml
-isolation_forest:
-  contamination: 0.1      # Expected anomaly percentage (10%)
+model:
+  contamination: 0.05     # Expected outlier fraction
   n_estimators: 100       # Number of trees
+  max_samples: 64         # Samples drawn per tree
   random_state: 42        # Reproducibility
-  max_samples: auto       # Auto-tune sample size
 ```
 
 ## Scaling Logic
@@ -88,7 +88,7 @@ Resources scale gradually to avoid instability.
 ```
 Scale UP if:
   - IsolationForest detects anomaly (-1)
-  - CPU usage > cpu_scale_up_threshold (default 70%)
+  - CPU usage > cpu_scale_up_threshold (default 75%)
   - Current cores < max_cpu_cores
 
 Scale DOWN if:
@@ -104,12 +104,12 @@ Step size: cpu_scale_step (default 1 core)
 ```
 Scale UP if:
   - IsolationForest detects anomaly (-1)
-  - RAM usage % > ram_scale_up_threshold (default 80%)
+  - RAM usage % > ram_scale_up_threshold (default 75%)
   - Current RAM < max_ram_mb
 
 Scale DOWN if:
   - IsolationForest reports normal (1)
-  - RAM usage % < ram_scale_down_threshold (default 40%)
+  - RAM usage % < ram_scale_down_threshold (default 30%)
   - Current RAM > min_ram_mb
 
 Step size: ram_scale_step_mb (default 512 MB)
@@ -136,21 +136,26 @@ scaling:
   max_ram_mb: 16384
 
   # Confidence
-  min_confidence: 70  # 0 (the default) disables confidence gating
+  min_confidence: 0   # 0 disables confidence gating
+  dry_run: false      # Log decisions without applying them
 ```
 
-## Async Batch API Client
+## Async API client
 
-### Performance Improvement
+Before deciding anything the model needs each container's current CPU and memory
+allocation, which it reads from `/resource/lxc/config`. Those reads are issued
+concurrently instead of one after another, so the fetch stage does not grow
+linearly with container count.
 
-| Containers | Sequential | Async Batch | Speedup |
-|------------|-----------|-------------|---------|
-| 10 | 1.0s | 0.15s | 6.7x |
-| 20 | 2.0s | 0.25s | 8.0x |
-| 50 | 5.0s | 0.50s | 10x |
-| 100 | 10.0s | 1.0s | 10x |
+How much that saves depends entirely on how quickly the API answers, which in
+turn depends on `pct config` on your host. Rather than quoting a figure, read
+the real one: every cycle logs it.
 
-### Features
+```
+Batch fetch completed in 0.42s: 12/12 successful (28.6 containers/sec)
+```
+
+### Behaviour
 
 - Concurrent requests (up to 10 simultaneous)
 - Connection pooling
@@ -165,7 +170,7 @@ api:
   api_url: "http://127.0.0.1:5000"
   timeout: 5
   max_concurrent: 10
-  retry_attempts: 3
+  # retries live under retry_logic, see the configuration reference
 ```
 
 ## Circuit Breaker
@@ -219,21 +224,20 @@ api:
   api_url: "http://127.0.0.1:5000"
   timeout: 5
   max_concurrent: 10
-  retry_attempts: 3
+  # retries live under retry_logic, see the configuration reference
 
 # Data Configuration
-data:
-  metrics_file: "/var/log/lxc_metrics.json"
+data_file: "/var/log/lxc_metrics.json"
 
 # Logging Configuration
-logging:
-  log_level: "INFO"
-  log_file: "/var/log/lxc_autoscale_ml.log"
+log_level: "INFO"
+log_file: "/var/log/lxc_autoscale_ml.log"
 
 # ML Model Configuration
-isolation_forest:
-  contamination: 0.1
+model:
+  contamination: 0.05
   n_estimators: 100
+  max_samples: 64
   random_state: 42
 
 # Scaling Configuration
@@ -248,7 +252,8 @@ scaling:
   max_cpu_cores: 8
   min_ram_mb: 512
   max_ram_mb: 16384
-  min_confidence: 70  # 0 (the default) disables confidence gating
+  min_confidence: 0   # 0 disables confidence gating
+  dry_run: false      # Log decisions without applying them
 
 # Ignored Containers
 ignore_lxc: []
@@ -259,9 +264,13 @@ circuit_breaker:
   failure_threshold: 5
   timeout_seconds: 300
 
-# Sleep Configuration
-sleep_interval: 60
+# Cycle interval
+interval_seconds: 600
 ```
+
+The full, authoritative list is in the
+[configuration reference](/reference/configuration), which is generated from the
+files as shipped.
 
 ## Log Examples
 
@@ -311,8 +320,8 @@ curl http://127.0.0.1:5000/health/check
 
 ```bash
 # Check if process is running
-cat /var/lock/lxc_autoscale_ml.lock
-ps -p $(cat /var/lock/lxc_autoscale_ml.lock)
+cat /run/lxc_autoscale_ml.lock
+ps -p $(cat /run/lxc_autoscale_ml.lock)
 
 # If not running, restart service (auto-cleans stale lock)
 systemctl restart lxc_autoscale_ml

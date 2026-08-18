@@ -79,8 +79,16 @@ These packages are installed automatically by the installation script:
 |------|---------|--------|
 | 5000 | API | Localhost by default |
 
-::: tip
-The API listens on all interfaces but is protected by API key authentication. For additional security, restrict access using firewall rules.
+::: danger The API ships unauthenticated
+`server.host` defaults to `0.0.0.0` and `authentication.enabled` defaults to
+`false`, so out of the box anything that can route to port 5000 can resize,
+snapshot, clone and destroy containers. The service runs as root, because it
+executes `pct`.
+
+On the standard single-node layout, set `server.host: 127.0.0.1` — the model
+runs beside the API and does not need it exposed. If it must be reachable from
+another host, enable `authentication`, set a matching `api.api_key` in the model
+configuration, put TLS in front of it, and restrict access with firewall rules.
 :::
 
 ### Outbound Connections
@@ -95,7 +103,7 @@ The installation script requires internet access to download packages and source
 |-----------|---------|-------------|
 | `/etc/lxc_autoscale_ml/` | Configuration files | root:root 755 |
 | `/var/log/` | Log files | root:root 755 |
-| `/var/lock/` | Lock files | root:root 755 |
+| `/run/` | Lock file (tmpfs, cleared on boot) | root:root 755 |
 | `/usr/local/bin/lxc_autoscale_ml/` | Application code | root:root 755 |
 
 ### Disk Space for Logs
@@ -104,7 +112,7 @@ The installation script requires internet access to download packages and source
 |------|-------------|-------|
 | `lxc_metrics.json` | 2 MB max | Limited to 1000 entries |
 | `lxc_autoscale_ml.log` | Varies | Use logrotate |
-| `autoscaleapi.log` | Varies | Use logrotate |
+| `lxc_autoscale_api_access.log` | Varies | Use logrotate |
 
 ## Container Requirements
 

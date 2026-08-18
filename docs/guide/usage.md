@@ -169,10 +169,10 @@ Example metrics:
 
 ```
 # Scaling actions
-lxc_scaling_actions_total{container_id="104",action="scale_up",resource="cpu"} 15
+lxc_autoscale_scaling_actions_total{container_id="104",resource="cpu",action="set"} 15
 
 # API requests
-lxc_api_requests_total{endpoint="/scale/cores",method="POST",status="200"} 42
+lxc_autoscale_api_requests_total{method="POST",endpoint="/scale/cores",status="200"} 42
 
 # Container resources
 lxc_container_cpu_cores{container_id="104"} 4
@@ -232,7 +232,7 @@ systemctl restart lxc_monitor
 If the service fails to start due to a stale lock:
 
 ```bash
-rm /var/lock/lxc_autoscale_ml.lock
+rm /run/lxc_autoscale_ml.lock
 systemctl start lxc_autoscale_ml
 ```
 

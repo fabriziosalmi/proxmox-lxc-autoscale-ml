@@ -1,6 +1,9 @@
 # What is LXC AutoScale ML?
 
-LXC AutoScale ML is a resource management daemon for Proxmox environments. It monitors LXC container resource usage and automatically adjusts CPU and memory allocations with zero downtime, using machine learning to predict resource demands.
+LXC AutoScale ML adjusts the CPU and memory allocated to Proxmox LXC
+containers. It collects per-container metrics, trains an anomaly detection model
+on each container's own history, and applies changes by running `pct` on the
+host. Resizing CPU and memory with `pct set` does not restart the container.
 
 ## Key Features
 
@@ -21,15 +24,26 @@ Resources scale gradually to avoid instability:
 
 This prevents the system from jumping between minimum and maximum allocations.
 
-### High-Performance Architecture
+### Concurrent configuration fetching
 
-The batch async API client fetches container configurations concurrently, providing **10x faster** performance compared to sequential requests. A deployment with 60 containers completes configuration fetching in approximately 0.6 seconds.
+Before deciding, the model reads each container's current allocation from the
+API. Those reads are issued concurrently, up to `api.max_concurrent` at a time
+(10 by default), so a cycle does not grow linearly with the number of
+containers. How much that saves depends on how quickly the API answers, which
+depends on how quickly `pct config` returns on your host.
 
-### Enterprise Security
+### Security
 
-- **API Key Authentication**: All sensitive endpoints require authentication
-- **Rate Limiting**: 120 requests per minute with automatic localhost bypass
-- **Input Validation**: Comprehensive parameter validation prevents injection attacks
+- **API key authentication**, off by default. When enabled, every endpoint
+  except `/health/check` and `/metrics` requires a key, compared in constant
+  time.
+- **Per-IP rate limiting**, 120 requests per minute by default, with localhost
+  exempt so the model is not throttled.
+- **Input validation** on every parameter. Commands are handed to the kernel as
+  argument lists and never go through a shell.
+
+The API runs as root, because `pct` requires it, and binds to every interface by
+default. See [Configuration](/reference/configuration) before exposing it.
 
 ### Fault Tolerance
 

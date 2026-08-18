@@ -1,6 +1,6 @@
 # Components Overview
 
-LXC AutoScale ML consists of three main components that work together to provide intelligent autoscaling.
+LXC AutoScale ML is three separate services. Each runs under its own systemd unit and reads its own configuration file.
 
 ## Architecture
 

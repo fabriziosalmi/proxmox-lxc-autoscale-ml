@@ -225,39 +225,39 @@ scrape_configs:
 
 ### Useful PromQL Queries
 
-**Scaling rate per hour:**
+**Scaling rate per hour, by resource:**
 
 ```promql
-rate(lxc_scaling_actions_total[1h]) * 3600
+sum by (resource) (rate(lxc_autoscale_scaling_actions_total[1h])) * 3600
 ```
 
-**Scale up to scale down ratio:**
-
-```promql
-sum(lxc_scaling_actions_total{action="scale_up"})
-/
-sum(lxc_scaling_actions_total{action="scale_down"})
-```
+The `action` label is `set` for CPU and RAM and `increase` for storage; direction
+is not recorded, so scale-up and scale-down cannot be told apart here. The
+decision itself is in the model's log.
 
 **Average API response time:**
 
 ```promql
-rate(lxc_api_request_duration_seconds_sum[5m])
+rate(lxc_autoscale_api_request_duration_seconds_sum[5m])
 /
-rate(lxc_api_request_duration_seconds_count[5m])
+rate(lxc_autoscale_api_request_duration_seconds_count[5m])
 ```
 
-**Containers with high CPU usage:**
+**Containers whose scaling keeps failing:**
 
 ```promql
-lxc_container_cpu_usage_percent > 80
+sum by (container_id) (rate(lxc_autoscale_scaling_failures_total[15m])) > 0
 ```
 
-**Open circuit breakers:**
+**Total resources allocated across the fleet:**
 
 ```promql
-count(lxc_autoscale_container_cpu_cores)
+sum(lxc_autoscale_container_cpu_cores)
+sum(lxc_autoscale_container_memory_mb)
 ```
+
+Container *usage* is not exported here: it is collected by the monitor, which
+has no metrics endpoint. It is in `/var/log/lxc_metrics.json`.
 
 ## Alerting Examples
 
@@ -268,7 +268,7 @@ groups:
   - name: lxc_autoscale
     rules:
       - alert: HighScalingRate
-        expr: rate(lxc_scaling_actions_total[1h]) * 3600 > 10
+        expr: sum(rate(lxc_autoscale_scaling_actions_total[1h])) * 3600 > 10
         for: 5m
         labels:
           severity: warning
@@ -276,17 +276,17 @@ groups:
           summary: "High scaling activity detected"
           description: "More than 10 scaling actions per hour"
 
-      - alert: CircuitBreakerOpen
+      - alert: AutoScaleAPIDown
         expr: up{job="lxc-autoscale-api"} == 0
         for: 1m
         labels:
           severity: critical
         annotations:
-          summary: "Circuit breaker is open"
+          summary: "The AutoScale API is not responding"
           description: "API failures detected, circuit breaker is open"
 
       - alert: APIHighLatency
-        expr: rate(lxc_api_request_duration_seconds_sum[5m]) / rate(lxc_api_request_duration_seconds_count[5m]) > 1
+        expr: rate(lxc_autoscale_api_request_duration_seconds_sum[5m]) / rate(lxc_autoscale_api_request_duration_seconds_count[5m]) > 1
         for: 5m
         labels:
           severity: warning

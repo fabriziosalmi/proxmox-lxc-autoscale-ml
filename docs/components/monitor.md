@@ -34,7 +34,7 @@ The Monitor component collects resource metrics from LXC containers and stores t
    ↓
 3. Append to Metrics File
    ↓
-4. Check File Size (limit to max_entries)
+4. Trim to max_metrics_entries
    ↓
 5. Sleep & Repeat
 ```
@@ -130,74 +130,76 @@ Automatic size limiting to 1000 entries (configurable).
 ### Configuration
 
 ```yaml
-metrics:
-  max_entries: 1000
+monitoring:
+  max_metrics_entries: 1000
 ```
 
-**Guidelines:**
+Each entry is one collection cycle covering every running container, so the
+file's size depends on how many containers you have as well as on this number.
+The model retrains from the whole file each cycle, so this also bounds how long
+training takes.
 
-| Deployment Size | Recommended `max_entries` |
-|-----------------|---------------------------|
-| Small (< 10 containers) | 500 |
-| Medium (10-50 containers) | 1000 (default) |
-| Large (50+ containers) | 1500 |
-
-### Impact
-
-| Metric | Before | After |
-|--------|--------|-------|
-| Max file size | Unlimited | ~2 MB |
-| Memory usage | Growing | Stable |
-| Model training time | Increasing | Constant |
+The oldest entries are dropped once the limit is reached, and the file is
+written through a temporary file and renamed into place, so an interrupted write
+cannot truncate it.
 
 ## Configuration Reference
 
 ```yaml
 # /etc/lxc_autoscale_ml/lxc_monitor.yaml
 
-# Metrics Configuration
-metrics:
-  output_file: "/var/log/lxc_metrics.json"
-  max_entries: 1000
-  collection_interval: 10  # Seconds
-
-# Logging Configuration
 logging:
-  log_level: "INFO"
   log_file: "/var/log/lxc_monitor.log"
+  log_max_bytes: 5242880   # rotate at 5 MB
+  log_backup_count: 7
+  log_level: "INFO"
 
-# Container Filter
-containers:
-  ignore_stopped: true
-  ignore_templates: true
-
-# Performance
-performance:
-  batch_size: 10
-  timeout: 5
+monitoring:
+  export_file: "/var/log/lxc_metrics.json"
+  check_interval: 60       # seconds between cycles
+  enable_swap: true
+  enable_network: true
+  enable_filesystem: true
+  parallel_processing: true
+  max_workers: 8
+  excluded_devices: ['loop', 'dm-']
+  retry_limit: 3
+  retry_delay: 2
+  max_metrics_entries: 1000
 ```
+
+Stopped containers are skipped because `pct list` is filtered on the status
+column; there is no separate setting for it. The full list of options is in the
+[configuration reference](/reference/configuration).
 
 ## Log Examples
 
 **Normal operation:**
 
 ```
-INFO - LXC Monitor started
-INFO - Found 12 running containers
-INFO - Collecting metrics from container 101...
-INFO - Collecting metrics from container 102...
-INFO - Collected metrics for 12 containers in 0.4s
-INFO - Metrics file size: 987 entries
-INFO - Sleeping for 10 seconds...
+INFO - Starting new metrics collection cycle.
+INFO - Collecting metrics for container: 101
+INFO - Collecting metrics for container: 102
+INFO - Metrics successfully exported to /var/log/lxc_metrics.json (987 entries)
+INFO - Waiting for 60 seconds before the next cycle.
 ```
 
 **Size limiting:**
 
 ```
-INFO - Collected metrics for 15 containers
-WARNING - Metrics file has 1023 entries (limit: 1000)
-INFO - Trimmed metrics file to 1000 entries (removed 23 oldest)
+INFO - Rotated metrics: removed 23 old entries, keeping last 1000
+INFO - Metrics successfully exported to /var/log/lxc_metrics.json (1000 entries)
 ```
+
+**A container that cannot be reached:**
+
+```
+WARNING - Attempt 1 failed for get_container_cpu_usage with error: ...
+ERROR - All 3 attempts failed for get_container_cpu_usage.
+ERROR - Failed to collect metrics for container 105: ...
+```
+
+One unreachable container does not cost the cycle; the rest are still written.
 
 **Errors:**
 
@@ -209,45 +211,44 @@ ERROR - Failed to parse metrics: Invalid JSON in lxc_metrics.json
 
 ## Performance Tuning
 
-### Small Deployments (< 20 containers)
+Three settings matter here: how often a cycle runs, how many containers are
+probed at once, and how much history is kept.
+
+### Few containers (under 20)
 
 ```yaml
-metrics:
-  collection_interval: 5   # More frequent
-  max_entries: 500
-
-performance:
-  batch_size: 10
-  timeout: 3
+monitoring:
+  check_interval: 30       # more frequent samples
+  max_workers: 8
+  max_metrics_entries: 500
 ```
 
-### Medium Deployments (20-60 containers)
+### Medium (20 to 60 containers)
 
 ```yaml
-metrics:
-  collection_interval: 10  # Default
-  max_entries: 1000
-
-performance:
-  batch_size: 10
-  timeout: 5
+monitoring:
+  check_interval: 60       # default
+  max_workers: 8
+  max_metrics_entries: 1000
 ```
 
-### Large Deployments (60+ containers)
+### Many containers (60 and above)
 
 ```yaml
-metrics:
-  collection_interval: 30  # Less frequent
-  max_entries: 1500
-
-performance:
-  batch_size: 20
-  timeout: 10
+monitoring:
+  check_interval: 120      # less frequent, each cycle costs more
+  max_workers: 16
+  max_metrics_entries: 1500
 ```
+
+`check_interval` should not be shorter than a cycle actually takes; the log line
+`Metrics successfully exported ...` tells you how long that is on your host.
+`max_workers` bounds how many `pct exec` calls run at once, so raising it costs
+host CPU during collection.
 
 ## Log Rotation
 
-Create `/etc/logrotate.d/lxc_monitor`:
+Create `/etc/logrotate.d/lxc-autoscale-api`:
 
 ```
 /var/log/lxc_monitor.log {

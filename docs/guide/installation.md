@@ -56,9 +56,9 @@ chmod +x /usr/local/bin/lxc_autoscale_ml/*/*.py
 
 ```bash
 mkdir -p /etc/lxc_autoscale_ml
-cp /usr/local/bin/lxc_autoscale_ml/api/lxc_autoscale_api.yaml /etc/lxc_autoscale_ml/
-cp /usr/local/bin/lxc_autoscale_ml/model/lxc_autoscale_ml.yaml /etc/lxc_autoscale_ml/
-cp /usr/local/bin/lxc_autoscale_ml/monitor/lxc_monitor.yaml /etc/lxc_autoscale_ml/
+cp /etc/lxc_autoscale_ml/lxc_autoscale_api.yaml /etc/lxc_autoscale_ml/
+cp /etc/lxc_autoscale_ml/lxc_autoscale_ml.yaml /etc/lxc_autoscale_ml/
+cp /etc/lxc_autoscale_ml/lxc_monitor.yaml /etc/lxc_autoscale_ml/
 ```
 
 ### Step 5: Install Systemd Services
@@ -72,7 +72,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /usr/local/bin/lxc_autoscale_ml/api/lxc_autoscale_api.py
+ExecStart=/usr/bin/python3 /usr/local/bin/lxc_autoscale_api/lxc_autoscale_api.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -91,7 +91,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /usr/local/bin/lxc_autoscale_ml/monitor/lxc_monitor.py
+ExecStart=/usr/bin/python3 /usr/local/bin/lxc_monitor.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -110,7 +110,7 @@ After=network.target lxc_autoscale_api.service lxc_monitor.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /usr/local/bin/lxc_autoscale_ml/model/lxc_autoscale_ml.py
+ExecStart=/usr/bin/python3 /usr/local/bin/lxc_autoscale_ml/lxc_autoscale_ml.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -143,7 +143,8 @@ Edit `/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml`:
 ```yaml
 authentication:
   enabled: true
-  api_key: "your-generated-key-here"
+  api_keys:
+    - "your-generated-key-here"
 ```
 
 Restart the API service:
@@ -197,13 +198,22 @@ ls -la /var/log/lxc_metrics.json
 journalctl -u lxc_autoscale_ml -n 20
 ```
 
-## Log Rotation Setup
+## Log rotation
 
-Create `/etc/logrotate.d/lxc_autoscale`:
+The installer configures no logrotate stanza, and most logs do not need one:
+
+| Log | Rotated by |
+|-----|-----------|
+| `/var/log/lxc_autoscale_ml.log` | the model itself, at 10 MB, 5 kept |
+| `/var/log/lxc_monitor.log` | the monitor itself, per `logging.log_max_bytes` |
+| `/var/log/lxc_autoscale_api_access.log` | **nothing** |
+| `/var/log/lxc_autoscale_api_error.log` | **nothing** |
+
+Only gunicorn's two logs are unmanaged. If you keep them as files rather than
+sending them to the journal, create `/etc/logrotate.d/lxc-autoscale-api`:
 
 ```
-/var/log/lxc_autoscale_ml.log
-/var/log/autoscaleapi*.log {
+/var/log/lxc_autoscale_api_*.log {
     daily
     missingok
     rotate 7
@@ -214,10 +224,17 @@ Create `/etc/logrotate.d/lxc_autoscale`:
     sharedscripts
     postrotate
         systemctl reload lxc_autoscale_api > /dev/null 2>&1 || true
-        systemctl reload lxc_autoscale_ml > /dev/null 2>&1 || true
     endscript
 }
 ```
+
+`lxc_autoscale_api` is the only unit with an `ExecReload`. Do not add the model
+or the monitor to a `postrotate` reload: they have none, and rotating their
+files externally fights the rotation they already do.
+
+Alternatively set `gunicorn.access_log_file` and `gunicorn.error_log_file` to
+`"-"` in `lxc_autoscale_api.yaml`, which sends both to the journal and removes
+the need for logrotate entirely.
 
 ## Troubleshooting Installation
 

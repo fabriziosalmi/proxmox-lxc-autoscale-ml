@@ -5,6 +5,67 @@ All notable changes to the LXC AutoScale ML project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+Documentation and shipped configuration brought in line with the code, with
+contract tests covering several classes of drift. Those tests check that
+documented endpoints, metric names, systemd unit names, configuration keys,
+declared default *values*, filesystem paths and the stated Python range match
+what ships; and that no runnable example uses a removed feature. They do **not**
+check response bodies, log strings, prose descriptions of behaviour, or
+consistency between pages -- those remain reviewed by hand.
+
+- **`authentication.api_key` never existed.** The getting-started guide, the
+  installation guide, the upgrade guide and the API component page all told
+  readers to set it. The code reads `authentication.api_keys`, a list, so
+  anyone who followed those instructions believed authentication was enabled
+  when it was not.
+- **Twelve more configuration keys shipped in the defaults and were read by
+  nobody**: `lxc.verify_ssl`, `lxc.max_retries`, `scaling.total_cores`,
+  `scaling.total_ram_mb`, `scaling.target_cpu_load_percent`,
+  `scaling.ram_chunk_size`, `scaling.ram_upper_limit`, and the whole
+  `feature_engineering` and `prediction` sections. Removed.
+- **`circuit_breaker` and `scaling.min_confidence` are now in the shipped model
+  config.** The code reads both; the file never mentioned them.
+- **The monitor configuration reference was fiction.** It documented a
+  `metrics`, `containers` and `performance` layout that has never existed; the
+  real file uses `monitoring` and `logging`.
+- **Stale metric names throughout**: `lxc_scaling_actions_total` and
+  `lxc_api_request_duration_seconds` where the code exports
+  `lxc_autoscale_*`, and an `action="scale_up"` label that is really
+  `set`/`increase`. Every query and alert example was unusable as written.
+- Model documentation used `isolation_forest`, `sleep_interval`, `data.metrics_file`
+  and `retry_attempts` for what the code calls `model`, `interval_seconds`,
+  `data_file` and `retry_logic.max_retries`.
+
+### Changed
+
+- **Invented benchmarks removed.** The docs carried a table of sequential
+  versus async fetch times with speedups up to "10x", with no methodology,
+  hardware or measurement behind them -- for an endpoint that returned an error
+  on every call until v1.3.0. Replaced with a description of the mechanism and
+  a pointer to the timing each cycle logs.
+- Unverifiable claims removed: "Enterprise Security" for authentication that
+  was off by default and unwired, "Production-Ready" for software that had
+  never worked, "zero downtime", "high accuracy", "seamless", "comprehensive".
+  Component descriptions now say what each service does, including what it does
+  not do.
+- Emoji removed from the documentation.
+- Python is stated as 3.10-3.12 in the README, the landing page and the
+  requirements page, instead of "Python 3.x".
+
+### Added
+
+- `tests/test_config_contract.py` and `tests/test_docs_contract.py`: contract
+  tests that fail if a configuration file grows a key no code reads, if the docs
+  document a setting or endpoint or metric that does not exist, if a documented
+  default disagrees with the shipped file, if a documented path is one the
+  deployment never creates, if a YAML example anywhere uses an unknown key, if a
+  systemd unit points at a file the installer never places, or if emoji or the
+  banned claims come back.
+
 ## [1.3.0] - 2026-08-17
 
 ### Upgrade notes
@@ -198,7 +259,7 @@ next interval, and one bad container no longer abandons the rest of the fleet.
 
 Major release with critical bug fixes, performance improvements, and new enterprise features.
 
-### 🎉 Highlights
+### Highlights
 
 - **10x Performance**: Batch async API calls for concurrent container config fetching
 - **Enterprise Security**: API key authentication, rate limiting, input validation
@@ -366,12 +427,12 @@ Major release with critical bug fixes, performance improvements, and new enterpr
 
 ### Security
 
-- ✅ API key authentication on all sensitive endpoints
-- ✅ Rate limiting with per-IP tracking
-- ✅ Input validation prevents injection attacks
-- ✅ Constant-time API key comparison
-- ✅ Localhost exemption for internal services
-- ✅ Security headers in all responses
+- API key authentication on all sensitive endpoints
+- Rate limiting with per-IP tracking
+- Input validation prevents injection attacks
+- Constant-time API key comparison
+- Localhost exemption for internal services
+- Security headers in all responses
 
 ### Deprecated
 
@@ -519,4 +580,3 @@ If you were hitting rate limits:
 
 ---
 
-**Thank you for using LXC AutoScale ML!** 🎉
