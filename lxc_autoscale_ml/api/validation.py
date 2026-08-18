@@ -120,11 +120,14 @@ def validate_snapshot_name(snapshot_name):
     if not snapshot_name or not isinstance(snapshot_name, str):
         raise ValidationError("Snapshot name must be a non-empty string")
 
-    # Allow alphanumeric, hyphens, underscores, max 40 chars
-    if not re.match(r'^[a-zA-Z0-9_-]{1,40}$', snapshot_name):
+    # Alphanumeric, hyphens and underscores, max 40 chars, and it may not
+    # START with a hyphen: `pct delsnapshot 104 -foo` would read the name as an
+    # option rather than as an argument.
+    if not re.match(r'^[a-zA-Z0-9_][a-zA-Z0-9_-]{0,39}$', snapshot_name):
         raise ValidationError(
-            f"Snapshot name must contain only alphanumeric characters, "
-            f"hyphens, and underscores (max 40 chars): {snapshot_name}"
+            f"Snapshot name must start with a letter, digit or underscore and "
+            f"contain only alphanumeric characters, hyphens and underscores "
+            f"(max 40 chars): {snapshot_name}"
         )
 
     return snapshot_name
@@ -183,19 +186,33 @@ def validate_node_name(node_name):
 
     return node_name
 
+# Methods that do not change state. Only these may take their parameters from
+# the query string.
+SAFE_METHODS = frozenset({"GET", "HEAD"})
+
+
 def extract_request_data():
     """
-    Collect request parameters from the query string and the JSON body.
+    Collect request parameters for the current request.
 
     ``request.get_json(silent=True)`` returns ``None`` instead of aborting the
     request when there is no body or the Content-Type is not JSON, which is the
     normal situation for a GET. Reading ``request.json`` directly there raises
     and Flask turns that into a 400/415 before the view ever runs.
 
+    The query string is read **only for safe methods**. Accepting it on every
+    method made the mutating endpoints drivable by a cross-origin HTML form:
+    a `<form method="post" action="http://host:5000/scale/ram?lxc_id=104&memory=64">`
+    is a CORS *simple request*, so it needs no preflight and no JSON content
+    type. With authentication disabled and the API bound to 0.0.0.0 -- both
+    shipped defaults -- any page an operator loaded could resize or roll back
+    containers on a root-privileged API. Requiring a JSON body for mutating
+    methods restores the preflight that blocks it.
+
     Returns:
         dict: Merged parameters, with JSON body values taking precedence.
     """
-    data = request.args.to_dict()
+    data = request.args.to_dict() if request.method in SAFE_METHODS else {}
 
     payload = request.get_json(silent=True)
     if isinstance(payload, dict):

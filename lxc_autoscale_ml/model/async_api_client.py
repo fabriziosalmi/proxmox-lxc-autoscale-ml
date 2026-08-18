@@ -15,7 +15,8 @@ class AsyncAPIClient:
     - Timeout management
     """
 
-    def __init__(self, base_url: str, timeout: int = 5, max_concurrent: int = 10):
+    def __init__(self, base_url: str, timeout: int = 5, max_concurrent: int = 10,
+                 api_key: str | None = None):
         """
         Initialize async API client.
 
@@ -23,8 +24,11 @@ class AsyncAPIClient:
             base_url: Base URL for API (e.g., http://127.0.0.1:5000)
             timeout: Request timeout in seconds
             max_concurrent: Maximum concurrent requests
+            api_key: Sent as X-API-Key. Required when the API has
+                `authentication.enabled: true`; without it every request 401s.
         """
         self.base_url = base_url.rstrip('/')
+        self.api_key = api_key
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
@@ -39,7 +43,8 @@ class AsyncAPIClient:
         )
         self._session = aiohttp.ClientSession(
             connector=connector,
-            timeout=self.timeout
+            timeout=self.timeout,
+            headers={"X-API-Key": self.api_key} if self.api_key else None,
         )
         return self
 
@@ -105,6 +110,16 @@ class AsyncAPIClient:
                                 if circuit_breaker:
                                     circuit_breaker.record_failure(f"api_{container_id}")
                                 return (container_id, None)
+                        elif response.status in (401, 403):
+                            # Retrying cannot help, and the generic "client
+                            # error" wording sent operators looking in the
+                            # wrong place while autoscaling silently stopped.
+                            logging.error(
+                                f"The API rejected our credentials (HTTP {response.status}). "
+                                f"It has authentication.enabled: true; set `api.api_key` in "
+                                f"the model configuration to one of its `authentication.api_keys`."
+                            )
+                            return (container_id, None)
                         else:
                             # Client error - don't retry
                             logging.warning(
@@ -197,7 +212,8 @@ async def fetch_all_container_configs(
     api_url: str,
     circuit_breaker = None,
     timeout: int = 5,
-    max_concurrent: int = 10
+    max_concurrent: int = 10,
+    api_key: str | None = None,
 ) -> dict[str, dict | None]:
     """
     Convenience function to fetch all container configs with proper session management.
@@ -212,7 +228,7 @@ async def fetch_all_container_configs(
     Returns:
         Dict mapping container_id to config
     """
-    async with AsyncAPIClient(api_url, timeout, max_concurrent) as client:
+    async with AsyncAPIClient(api_url, timeout, max_concurrent, api_key) as client:
         return await client.fetch_batch_configs(container_ids, circuit_breaker)
 
 
@@ -221,7 +237,8 @@ def fetch_container_configs_sync(
     api_url: str,
     circuit_breaker = None,
     timeout: int = 5,
-    max_concurrent: int = 10
+    max_concurrent: int = 10,
+    api_key: str | None = None,
 ) -> dict[str, dict | None]:
     """
     Synchronous wrapper for async batch fetch - for use in sync code.
@@ -246,7 +263,7 @@ def fetch_container_configs_sync(
                 future = executor.submit(
                     asyncio.run,
                     fetch_all_container_configs(
-                        container_ids, api_url, circuit_breaker, timeout, max_concurrent
+                        container_ids, api_url, circuit_breaker, timeout, max_concurrent, api_key
                     )
                 )
                 return future.result()
@@ -254,13 +271,13 @@ def fetch_container_configs_sync(
             # Use existing loop
             return loop.run_until_complete(
                 fetch_all_container_configs(
-                    container_ids, api_url, circuit_breaker, timeout, max_concurrent
+                    container_ids, api_url, circuit_breaker, timeout, max_concurrent, api_key
                 )
             )
     except RuntimeError:
         # No event loop, create new one
         return asyncio.run(
             fetch_all_container_configs(
-                container_ids, api_url, circuit_breaker, timeout, max_concurrent
+                container_ids, api_url, circuit_breaker, timeout, max_concurrent, api_key
             )
         )

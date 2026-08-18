@@ -60,9 +60,22 @@ timeout = _gunicorn.get("timeout_seconds", 120)
 graceful_timeout = _gunicorn.get("graceful_timeout_seconds", 30)
 preload_app = _gunicorn.get("preload_app", True)
 
-# Recycle workers periodically as a backstop against slow leaks.
-max_requests = _gunicorn.get("max_requests", 500)
-max_requests_jitter = _gunicorn.get("max_requests_jitter", 50)
+# Worker recycling is OFF by default, and that is deliberate.
+#
+# The rate limiter's per-IP window and the Prometheus counters live in this
+# process's memory. gthread counts a request before handing it to the app, so
+# 429s and 401s drove the recycle themselves -- an attacker's own rejected
+# requests cleared the window that was throttling them. The unbounded-memory
+# argument for recycling no longer applies either: rate_limiting evicts idle
+# clients and caps the table.
+max_requests = _gunicorn.get("max_requests", 0)
+max_requests_jitter = _gunicorn.get("max_requests_jitter", 0)
+
+# Do not log the query string: `?api_key=` is an accepted way to authenticate,
+# and gunicorn's default access format ("%(r)s") writes the full request line,
+# putting the key in a world-readable log file.
+access_log_format = _gunicorn.get(
+    "access_log_format", '%(h)s "%(m)s %(U)s %(H)s" %(s)s %(b)s %(D)sus')
 
 loglevel = _gunicorn.get("log_level", "info")
 accesslog = _gunicorn.get("access_log_file", "-")

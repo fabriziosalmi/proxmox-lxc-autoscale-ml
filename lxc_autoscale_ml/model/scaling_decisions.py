@@ -131,12 +131,15 @@ def apply_scaling(lxc_id, new_cores, new_ram, config):
     # `timeout` is accepted as well for configs written against the older
     # documentation.
     request_timeout = config["api"].get("timeout_seconds", config["api"].get("timeout", 10))
+    api_key = config["api"].get("api_key")
+    headers = {"X-API-Key": api_key} if api_key else None
 
     def perform_request(url, data, resource_type):
         resource_key = "cores" if resource_type == "CPU" else "memory"
         for attempt in range(max_retries):
             try:
-                response = requests.post(url, json=data, timeout=request_timeout)
+                response = requests.post(url, json=data, timeout=request_timeout,
+                                         headers=headers)
                 response.raise_for_status()
                 logging.info(f"Successfully scaled {resource_type} for LXC ID {lxc_id} to {data[resource_key]} {resource_type} units.")
                 return True
@@ -145,6 +148,17 @@ def apply_scaling(lxc_id, new_cores, new_ram, config):
                 # response was ever received. Reading it off the local variable
                 # instead used to raise UnboundLocalError and mask the failure.
                 status_code = e.response.status_code if e.response is not None else None
+                if status_code in (401, 403):
+                    # Retrying cannot help. Without this the operator saw only
+                    # a generic failure while autoscaling stopped, and the
+                    # usual response was to turn authentication back off.
+                    logging.error(
+                        f"The API rejected our credentials (HTTP {status_code}) when scaling "
+                        f"{resource_type} for LXC ID {lxc_id}. It has authentication.enabled: "
+                        f"true; set `api.api_key` in the model configuration to one of its "
+                        f"`authentication.api_keys`."
+                    )
+                    return False
                 if status_code == 500:
                     logging.error(f"Server error (500) encountered on attempt {attempt + 1} to scale {resource_type} for LXC ID {lxc_id}. Aborting further attempts.")
                     break  # Skip further retries for 500 errors

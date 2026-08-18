@@ -47,12 +47,24 @@ def app(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def reset_rate_limit():
+def reset_module_state():
+    """Clear every piece of process-global state between tests.
+
+    The API keeps the rate-limit windows and the health probe's cache in module
+    memory. Leaking either across tests makes results depend on execution
+    order, which is how a cached "healthy" made a later unhealthy assertion
+    pass for the wrong reason.
+    """
+    import health_check
     import rate_limiting
 
-    rate_limiting.rate_limit_data.clear()
+    def clear():
+        rate_limiting.rate_limit_data.clear()
+        health_check._probe_cache.update({"at": 0.0, "result": None})
+
+    clear()
     yield
-    rate_limiting.rate_limit_data.clear()
+    clear()
 
 
 @pytest.fixture

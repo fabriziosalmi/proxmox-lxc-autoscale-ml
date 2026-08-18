@@ -8,11 +8,34 @@ whatever is watching it.
 import logging
 import shutil
 import subprocess
+import threading
+import time
 
 from flask import current_app, jsonify
 
 # The health check must answer quickly even when the node is struggling.
 PROBE_TIMEOUT_SECONDS = 5
+
+# The probe forks `pct list` as root. The endpoint is deliberately
+# unauthenticated so systemd and Prometheus can reach it, which means anyone
+# who can reach the port can make the API fork. Caching bounds that to one fork
+# per interval regardless of request rate.
+PROBE_CACHE_SECONDS = 5
+_probe_cache = {"at": 0.0, "result": None}
+_probe_lock = threading.Lock()
+
+
+def _cached_check_pct():
+    now = time.monotonic()
+    with _probe_lock:
+        cached = _probe_cache["result"]
+        if cached is not None and now - _probe_cache["at"] < PROBE_CACHE_SECONDS:
+            return cached
+    result = _check_pct()
+    with _probe_lock:
+        _probe_cache["at"] = time.monotonic()
+        _probe_cache["result"] = result
+    return result
 
 
 def _check_pct():
@@ -42,7 +65,7 @@ def health_check():
     checks = {}
     healthy = True
 
-    pct_ok, pct_detail = _check_pct()
+    pct_ok, pct_detail = _cached_check_pct()
     checks["lxc_commands"] = {"ok": pct_ok, "detail": pct_detail}
     healthy = healthy and pct_ok
 

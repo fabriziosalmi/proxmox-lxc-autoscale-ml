@@ -115,8 +115,17 @@ gunicorn:
   # Time to wait before forcefully killing workers during a graceful restart.
   graceful_timeout_seconds: 30  
   
-  # Number of requests a worker will handle before being restarted. Helps to prevent memory leaks.
-  max_requests: 500  
-  
-  # Adds a random jitter to `max_requests` to avoid all workers restarting at the same time.
-  max_requests_jitter: 50  
+  # Requests a worker handles before being recycled. 0 disables it, which is
+  # the default and is deliberate: the rate-limiter window and the Prometheus
+  # counters live in worker memory, so recycling silently resets both -- and a
+  # client's own rejected requests drove the recycle that cleared its window.
+  # The limiter evicts idle clients itself, so recycling is not needed to bound
+  # memory.
+  max_requests: 0
+
+  # Random spread on max_requests. Irrelevant while max_requests is 0.
+  max_requests_jitter: 0
+
+  # Access log format. Deliberately omits the query string, because ?api_key=
+  # is an accepted authentication method and this file is world-readable.
+  access_log_format: '%(h)s "%(m)s %(U)s %(H)s" %(s)s %(b)s %(D)sus'
