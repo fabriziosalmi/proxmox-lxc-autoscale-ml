@@ -5,9 +5,156 @@ All notable changes to the LXC AutoScale ML project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.0] - 2026-08-18
 
-### Fixed
+### Upgrade notes
+
+**Read this before upgrading.** Three changes break things that worked before.
+
+1. **`?api_key=` is no longer accepted.** Use the `X-API-Key` header. The query
+   form put the secret in gunicorn's access log, in shell history and in any
+   proxy log in front of the API.
+2. **POST and DELETE endpoints now require a JSON body.** They used to accept
+   parameters from the query string as well, which made them drivable by a
+   cross-origin HTML form. GET endpoints are unchanged.
+3. **If you use `authentication.enabled: true`, you must now set
+   `api.api_key` in the model configuration.** Previously the model sent no
+   credential at all, so enabling authentication stopped autoscaling entirely
+   -- this makes it work rather than breaking it, but the setting is new and
+   required.
+
+Also worth knowing:
+
+- The configuration files are installed **0600** in a **0750** directory. Any
+  automation reading them as a non-root user will need adjusting.
+- `gunicorn.max_requests` now defaults to **0** (recycling off). Recycling reset
+  the rate-limiter window and the Prometheus counters, and a client's own
+  rejected requests drove the recycle that cleared its window.
+- `circuit_breaker.timeout_seconds` now defaults to **1800**. At the old 300s
+  against a 600s cycle it could never block a call.
+- The `scaling` section is now **required**. A config without it passed
+  validation and then raised `KeyError` for every container, every cycle.
+- `min_confidence` values now mean something different -- see below. If you set
+  one, review it.
+- **Supported Python is 3.10 to 3.12** (unchanged from 1.3.0, restated because
+  the installer now enforces its dependencies).
+
+### Fixed -- autoscaling did the opposite of its job
+
+`preprocess_data` standard-scaled the two columns `determine_scaling_action`
+compares against percentage thresholds. A z-score never exceeds 75 and is almost
+always below 30, so **every container was scaled down on both axes, every
+cycle**. Measured before the fix: a container at 99% CPU holding 7900 MB of an
+8192 MB allocation, and an idle one at 3% CPU with 120 MB, produced the
+identical decision.
+
+The scaling was also redundant -- `train_anomaly_models` already wraps
+IsolationForest in a `StandardScaler` pipeline -- so removing it left the
+model's inputs unchanged.
+
+Every existing test asserted only that *something* was applied, never the
+direction. That is why two previous repair rounds walked past it.
+
+### Fixed -- a fresh install could never run the model
+
+`install.sh` had **never** installed `aiohttp`, since the commit that introduced
+the async client and its top-level import. Every `curl … | bash` install
+produced a model service that died on import -- and the installer printed
+"Installation process complete!" and exited 0.
+
+That broken installer was, until this release, the only thing preventing the
+inversion above from shrinking every container on the node.
+
+### Fixed -- security
+
+- **A cross-origin form could drive `pct`.** Widening the parameter source to
+  every HTTP method (part of the 1.3.0 issue-#14 repair) made six mutating POST
+  routes reachable as CORS simple requests: no preflight, no token, and by
+  default no credential.
+- **Authentication could not be turned on.** Neither model client sent a key, so
+  the hardening step three documentation pages recommend silently stopped
+  autoscaling -- and the natural response was to turn it back off.
+- **The API key was world-readable and logged.** Configs installed 0644 in an
+  0755 directory, and `?api_key=` landed in the access log.
+- **The rate limiter recycled the worker holding its own window**, and never
+  evicted idle clients -- so the obvious fix would have converted a throttle bug
+  into unbounded attacker-keyed memory growth. Eviction landed first.
+- `/health/check` forked a root `pct list` per anonymous request; now cached and
+  throttled. `/routes` had no limiter at all.
+- A non-ASCII configured key made every request 500. A snapshot name could start
+  with `-` and be read by `pct` as an option. The `method` metric label was
+  attacker-controlled on unmatched routes.
+
+### Fixed -- the monitor could stop without anyone noticing
+
+- **No timeout on any `pct` call.** One wedged container froze the collection
+  cycle forever; the process neither exited nor errored, so
+  `Restart=on-failure` never fired and the model kept scaling on a frozen
+  snapshot.
+- **The first CPU sample reported the since-boot average**, reintroducing for
+  one cycle the bug the delta was written to fix -- on every restart, for every
+  container, and that fabricated value entered the training history.
+- **`retry_on_failure` was dead code**: every probe swallowed its own error, and
+  a retry wrapper can only retry what raises.
+- **Four `pct exec` forks to read one file.** ~120 forks a minute on a
+  30-container node for the memory figures alone.
+- The export file was pretty-printed and rewritten in full every cycle: 12.16 MB
+  a write, ~17.5 GB a day at 20 containers. Now 6.70 MB and ~9.6 GB, with an
+  `fsync` before the rename.
+- Timestamps were naive local time, so `time_diff` -- a training feature -- goes
+  backwards for an hour at the DST fall-back.
+
+### Fixed -- settings that did nothing, or the wrong thing
+
+- **`min_confidence` above ~27 disabled all scaling.** Confidence divided by a
+  hard-coded constant about four times the real spread. The documented
+  "cautious" preset used 80. It is now the percentile of the sample's distance
+  from the decision boundary among the distances seen in training, so the whole
+  0-100 range is reachable.
+- **The circuit breaker could never fire** with the shipped window.
+- **A missing `scaling` section** passed validation, then raised `KeyError`
+  forever while the unit reported healthy.
+- **Half the health check could not fail**: it asserted `lxc.node` was set, a
+  value nothing reads.
+- **`retry_logic` governed only `apply_scaling`**, not the config fetch it is
+  documented for.
+- **`/scale/storage/increase` lost up to 1 GiB**, flooring the current size to
+  whole GB before writing an absolute target.
+- An empty configuration section returned a raw HTML 500 on every request.
+- Every scaling failure was labelled `reason="unknown"`.
+
+### Fixed -- correctness around the scaling loop
+
+- A failed config fetch fabricated the container's current allocation, then
+  computed an absolute target from that fiction -- collapsing it to the floor in
+  one cycle, self-maskingly.
+- `cores` is optional in Proxmox; treating its absence as an error made
+  `/resource/lxc/config` return 500 for such a container permanently.
+- Containers were evaluated from the entire retained history, so a container
+  stopped hours ago was still scaled -- and with VMID reuse, a new container
+  could be scaled on its predecessor's metrics.
+- Nothing checked whether the metrics were fresh.
+- A container at its floor or ceiling still emitted an action, so the loop
+  issued a no-op root `pct set` every interval.
+
+### Fixed -- deployment
+
+- A failed service start no longer reports success.
+- Unguarded `tput` aborted both scripts when `TERM` is unset -- the documented
+  `curl | bash` from cron.
+- The installer disabled all three units before any fallible work, so a failed
+  clone left a working install disabled across reboots.
+- `dpkg -l | grep -qw` counted removed-but-not-purged packages as installed.
+- `git clone` pinned no ref; `LXC_AUTOSCALE_REF` now selects a tag.
+- The model unit fed a YAML file to systemd as an `EnvironmentFile`.
+- `Restart=on-failure` with no `RestartSec` latched units `failed` in under a
+  second rather than retrying.
+
+### Fixed -- documentation
+
+Four pages asserted the API is protected by authentication; it ships disabled.
+The lock path, the API log names and the install layout were wrong throughout.
+Every PromQL example used pre-rename metric names.
 
 Documentation and shipped configuration brought in line with the code, with
 contract tests covering several classes of drift. Those tests check that
@@ -40,7 +187,7 @@ consistency between pages -- those remain reviewed by hand.
   and `retry_attempts` for what the code calls `model`, `interval_seconds`,
   `data_file` and `retry_logic.max_retries`.
 
-### Changed
+#### Also changed
 
 - **Invented benchmarks removed.** The docs carried a table of sequential
   versus async fetch times with speedups up to "10x", with no methodology,
@@ -56,7 +203,7 @@ consistency between pages -- those remain reviewed by hand.
 - Python is stated as 3.10-3.12 in the README, the landing page and the
   requirements page, instead of "Python 3.x".
 
-### Added
+#### Also added
 
 - `tests/test_config_contract.py` and `tests/test_docs_contract.py`: contract
   tests that fail if a configuration file grows a key no code reads, if the docs
@@ -65,6 +212,39 @@ consistency between pages -- those remain reviewed by hand.
   deployment never creates, if a YAML example anywhere uses an unknown key, if a
   systemd unit points at a file the installer never places, or if emoji or the
   banned claims come back.
+
+### Added
+
+- **A contract test for the installer**: it AST-walks every deployed module for
+  unconditional third-party imports and fails if the installer does not provide
+  one. That is the guard that would have caught the missing `aiohttp`.
+- Contract tests for documented default *values*, documented filesystem paths,
+  and claims about the authentication default.
+- A route/protection table asserting authentication and rate limiting
+  behaviourally on every route.
+- `monitoring.command_timeout`, `api.api_key`, `scaling.min_confidence`,
+  `circuit_breaker` in the shipped model config, `gunicorn.access_log_format`.
+
+### Known limitations
+
+Stated rather than left to be discovered:
+
+- **The IsolationForest verdict does not affect any scaling decision.** It is
+  computed, logged and discarded; direction and magnitude are entirely
+  threshold-driven. The model's only influence is through `min_confidence`.
+- **Rate limiting does not work behind a same-host reverse proxy.** The limiter
+  exempts 127.0.0.1, which is what `proxy_pass` makes every request look like.
+  A proxy-header fixer would be worse, not better, until the API can be told
+  which proxies to trust; use nginx's `limit_req_zone` instead.
+- **The metrics file is rewritten in full every cycle** (~9.6 GB/day at 20
+  containers). Append-only JSONL would fix it but changes the contract between
+  the monitor and the model.
+- **`pct clone` and `pct destroy` can outlive the per-command timeout**, which
+  kills the CLI but not the PVE worker it forked.
+- **Per-container I/O statistics reflect the host's disks**, because
+  `/proc/diskstats` is not namespaced, and the fields are sectors rather than
+  operations.
+- **Nothing here has been exercised against a live Proxmox node.**
 
 ## [1.3.0] - 2026-08-17
 
