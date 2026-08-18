@@ -111,6 +111,20 @@ server {
 }
 ```
 
+::: warning Rate limiting does not work behind this proxy
+The limiter exempts `127.0.0.1`, which is what `proxy_pass` makes every request
+look like. Nothing in the API reads `X-Real-IP` or `X-Forwarded-For`, so with
+nginx in front the per-IP limit is effectively disabled and the "invalid API
+key" warnings all log `127.0.0.1`.
+
+Installing a proxy-header fixer here would be **worse**, not better: with
+`server.host: 0.0.0.0` any client that can reach the port directly could then
+spoof `X-Forwarded-For: 127.0.0.1` and exempt itself. Until the API can be told
+which proxies to trust, rate limit in nginx itself (`limit_req_zone`) and treat
+the API's own limiter as covering only direct callers.
+:::
+
+
 ## Performance
 
 ### How many containers can it handle?

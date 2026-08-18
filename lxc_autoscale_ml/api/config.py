@@ -7,10 +7,19 @@ from flask import Flask
 
 DEFAULT_LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
-def load_config(config_file='/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml'):
+def load_config(config_file=None):
+    """Load the API configuration.
+
+    `or {}` throughout, because a section written but left empty parses to
+    None, and `.get(key, default)` returns that stored None rather than the
+    default -- which surfaced as a raw HTML 500 on every request. The gunicorn
+    config, the monitor and the model config loader all already guarded this;
+    only this file did not.
+    """
+    config_file = config_file or os.environ.get(
+        "LXC_AUTOSCALE_API_CONFIG", "/etc/lxc_autoscale_ml/lxc_autoscale_api.yaml")
     with open(config_file) as file:
-        config = yaml.safe_load(file)
-    return config
+        return yaml.safe_load(file) or {}
 
 def configure_logging(logging_config):
     """
@@ -54,26 +63,26 @@ def create_app(config=None):
     if config is None:
         config = load_config()
 
-    configure_logging(config.get('logging', {}))
+    configure_logging(config.get('logging') or {})
 
-    lxc_config = config.get('lxc', {})
+    lxc_config = (config.get('lxc') or {})
     app.config['LXC_NODE'] = lxc_config.get('node')
     app.config['DEFAULT_STORAGE'] = lxc_config.get('default_storage')
     app.config['TIMEOUT'] = lxc_config.get('timeout_seconds', 30)
 
     # Load the rate limiting configuration
-    app.config['RATE_LIMITING'] = config.get('rate_limiting', {})
+    app.config['RATE_LIMITING'] = (config.get('rate_limiting') or {})
 
     # Load authentication configuration
-    app.config['AUTHENTICATION'] = config.get('authentication', {'enabled': False})
+    app.config['AUTHENTICATION'] = (config.get('authentication') or {'enabled': False})
 
     # Listen address. Defaults match the historical hard-coded values.
-    app.config['SERVER'] = config.get('server', {})
+    app.config['SERVER'] = (config.get('server') or {})
 
     # Flask settings
     app.secret_key = os.urandom(24)
     app.config['DEBUG'] = False
-    app.config['LOGGING'] = config.get('logging', {})
-    app.config['ERROR_HANDLING'] = config.get('error_handling', {})
+    app.config['LOGGING'] = (config.get('logging') or {})
+    app.config['ERROR_HANDLING'] = (config.get('error_handling') or {})
 
     return app

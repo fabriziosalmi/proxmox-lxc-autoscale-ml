@@ -71,6 +71,20 @@ ENDPOINTS = [
 ]
 
 
+def _failure_reason(response):
+    """A coarse, bounded label for a failed scaling action.
+
+    Every failure used to be recorded as reason="unknown", so the failure
+    counter carried no diagnostic value at all. Derived from the status code
+    rather than the message, to keep the label set finite.
+    """
+    status = response[1]
+    if status < 400:
+        return None
+    return {400: "invalid_request", 401: "unauthenticated", 403: "forbidden",
+            404: "not_found", 429: "rate_limited"}.get(status, "command_failed")
+
+
 KNOWN_METHODS = frozenset({'GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'})
 
 
@@ -141,7 +155,8 @@ def set_cores():
     cores = data['cores']
     logging.info(f"Setting {cores} cores for container {lxc_id}")
     response = scale_cpu(lxc_id, cores)
-    record_scaling_action(lxc_id, 'cpu', 'set', success=response[1] < 400)
+    record_scaling_action(lxc_id, 'cpu', 'set', success=response[1] < 400,
+                          failure_reason=_failure_reason(response))
     return response
 
 
@@ -155,7 +170,8 @@ def set_ram():
     memory = data['memory']
     logging.info(f"Setting {memory} MB RAM for container {lxc_id}")
     response = scale_ram(lxc_id, memory)
-    record_scaling_action(lxc_id, 'ram', 'set', success=response[1] < 400)
+    record_scaling_action(lxc_id, 'ram', 'set', success=response[1] < 400,
+                          failure_reason=_failure_reason(response))
     return response
 
 
@@ -169,7 +185,8 @@ def increase_storage():
     disk_size = data['disk_size']
     logging.info(f"Increasing storage by {disk_size} GB for container {lxc_id}")
     response = resize_storage(lxc_id, disk_size)
-    record_scaling_action(lxc_id, 'storage', 'increase', success=response[1] < 400)
+    record_scaling_action(lxc_id, 'storage', 'increase', success=response[1] < 400,
+                          failure_reason=_failure_reason(response))
     return response
 
 

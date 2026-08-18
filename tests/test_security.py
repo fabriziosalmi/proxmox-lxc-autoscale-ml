@@ -232,3 +232,56 @@ class TestMetricLabels:
         body = client.get("/metrics").get_data(as_text=True)
         assert "PROPFIND" not in body
         assert 'method="other"' in body
+
+
+class TestEmptyConfigSections:
+    """A section written but left empty parses to None, and
+    `.get(key, default)` returns that stored None rather than the default --
+    which surfaced as a raw HTML 500 on every request. The gunicorn config, the
+    monitor and the model loader all guarded this; the API did not."""
+
+    @pytest.mark.parametrize("section", [
+        "lxc", "rate_limiting", "authentication", "server", "logging", "error_handling",
+    ])
+    def test_an_empty_section_does_not_break_startup(self, section, tmp_path, monkeypatch):
+        import config as api_config
+
+        base = {
+            "lxc": {"node": "pve", "timeout_seconds": 5},
+            "rate_limiting": {"enabled": False},
+            "authentication": {"enabled": False},
+            "server": {}, "logging": {}, "error_handling": {},
+        }
+        base[section] = None
+        app = api_config.create_app(base)
+        assert app.config["TIMEOUT"] in (5, 30)
+
+    def test_a_wholly_empty_file_is_tolerated(self, tmp_path, monkeypatch):
+        import config as api_config
+
+        path = tmp_path / "api.yaml"
+        path.write_text("# nothing here\n")
+        monkeypatch.setenv("LXC_AUTOSCALE_API_CONFIG", str(path))
+        assert api_config.load_config() == {}
+
+
+class TestScalingFailureLabels:
+    def test_a_failure_carries_a_reason(self, client, pct):
+        """Every failure used to be labelled reason="unknown", so the failure
+        counter carried no diagnostic value."""
+        metrics = pytest.importorskip("metrics")
+        if not metrics.PROMETHEUS_AVAILABLE:
+            pytest.skip("prometheus_client is not installed")
+
+        pct.responses = {("pct", "set"): RuntimeError("container is locked")}
+        client.post("/scale/cores", json={"lxc_id": 104, "cores": 8})
+        body = client.get("/metrics").get_data(as_text=True)
+        assert 'reason="command_failed"' in body
+
+    def test_the_reason_label_set_is_finite(self):
+        import lxc_autoscale_api as api
+
+        reasons = {api._failure_reason((None, code))
+                   for code in (200, 400, 401, 403, 404, 429, 500, 502, 503)}
+        assert None in reasons
+        assert len(reasons - {None}) <= 6, "the reason label must stay bounded"

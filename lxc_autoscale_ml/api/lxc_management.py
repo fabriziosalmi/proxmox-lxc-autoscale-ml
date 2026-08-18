@@ -164,9 +164,17 @@ class LXCManager:
         return optional_int("cores"), optional_int("memory")
 
     def resize_storage(self, lxc_id, disk_size):
-        """Grow the root filesystem by `disk_size` GB."""
-        new_size = self.get_current_disk_size(lxc_id) + int(disk_size)
-        return self._run_command(["pct", "resize", lxc_id, "rootfs", f"{new_size}G"])
+        """Grow the root filesystem by `disk_size` GB.
+
+        `pct resize` accepts a relative `+NG`, so there is no need to read the
+        current size and compute an absolute target. The read-modify-write it
+        replaces both raced with any concurrent resize and silently lost up to
+        1 GiB, because get_current_disk_size floors to whole GB -- a container
+        on a 8.5G rootfs asked to grow by 2G ended up at 10G, not 10.5G, while
+        the response reported success.
+        """
+        return self._run_command(
+            ["pct", "resize", lxc_id, "rootfs", f"+{int(disk_size)}G"])
 
     # --- Snapshots -----------------------------------------------------------
 

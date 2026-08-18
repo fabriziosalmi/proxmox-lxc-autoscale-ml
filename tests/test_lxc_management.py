@@ -119,9 +119,20 @@ class TestDiskSize:
         with pytest.raises(RuntimeError, match="current disk size"):
             manager.get_current_disk_size(104)
 
-    def test_resize_adds_to_the_current_size(self, manager, pct):
+    def test_resize_grows_by_a_relative_amount(self, manager, pct):
+        """`pct resize` takes `+NG`. The read-modify-write this replaces raced
+        with any concurrent resize and silently lost up to 1 GiB, because the
+        current size was floored to whole GB."""
         manager.resize_storage(104, 4)
-        pct.assert_ran("pct", "resize", 104, "rootfs", "12G")
+        pct.assert_ran("pct", "resize", 104, "rootfs", "+4G")
+        # No read of the current size at all.
+        assert not any(argv[:2] == ["pct", "config"] for argv in pct)
+
+    def test_a_fractional_current_size_is_not_lost(self, manager, pct):
+        """8.5G + 2G used to become 10G while reporting success."""
+        pct.output = "rootfs: local-lvm:vm-104-disk-0,size=8.5G\n"
+        manager.resize_storage(104, 2)
+        pct.assert_ran("pct", "resize", 104, "rootfs", "+2G")
 
 
 class TestCommandShapes:

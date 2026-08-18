@@ -55,11 +55,22 @@ class AsyncAPIClient:
             # Give time for connections to close
             await asyncio.sleep(0.1)
 
+    @staticmethod
+    def _backoff(attempt: int, retry_delay: int | None) -> int:
+        """Exponential backoff, seeded from retry_logic.retry_delay when given.
+
+        The delay was hard-coded, so `retry_logic.retry_delay` governed only
+        apply_scaling despite the config documenting it for API calls generally.
+        """
+        base = 1 if retry_delay is None else max(1, int(retry_delay))
+        return base * (2 ** attempt)
+
     async def fetch_container_config(
         self,
         container_id: str,
         retry_count: int = 3,
-        circuit_breaker = None
+        circuit_breaker = None,
+        retry_delay: int | None = None,
     ) -> tuple[str, dict | None]:
         """
         Fetch configuration for a single container with retry logic.
@@ -96,7 +107,7 @@ class AsyncAPIClient:
                         elif response.status >= 500:
                             # Server error - retry
                             if attempt < retry_count - 1:
-                                wait_time = (2 ** attempt)  # Exponential backoff
+                                wait_time = self._backoff(attempt, retry_delay)
                                 logging.warning(
                                     f"Server error {response.status} for container {container_id}, "
                                     f"retry {attempt + 1}/{retry_count} in {wait_time}s"
@@ -133,7 +144,7 @@ class AsyncAPIClient:
                             f"Timeout fetching container {container_id}, "
                             f"retry {attempt + 1}/{retry_count}"
                         )
-                        await asyncio.sleep(2 ** attempt)
+                        await asyncio.sleep(self._backoff(attempt, retry_delay))
                     else:
                         logging.error(
                             f"Timeout fetching container {container_id} after {retry_count} attempts"
@@ -148,7 +159,7 @@ class AsyncAPIClient:
                             f"Network error for container {container_id}: {e}, "
                             f"retry {attempt + 1}/{retry_count}"
                         )
-                        await asyncio.sleep(2 ** attempt)
+                        await asyncio.sleep(self._backoff(attempt, retry_delay))
                     else:
                         logging.error(
                             f"Network error for container {container_id} after "
@@ -163,7 +174,9 @@ class AsyncAPIClient:
     async def fetch_batch_configs(
         self,
         container_ids: list[str],
-        circuit_breaker = None
+        circuit_breaker = None,
+        retry_count: int = 3,
+        retry_delay: int | None = None,
     ) -> dict[str, dict | None]:
         """
         Fetch configurations for multiple containers concurrently.
@@ -182,7 +195,9 @@ class AsyncAPIClient:
 
         # Create tasks for all containers
         tasks = [
-            self.fetch_container_config(cid, circuit_breaker=circuit_breaker)
+            self.fetch_container_config(cid, retry_count=retry_count,
+                                        retry_delay=retry_delay,
+                                        circuit_breaker=circuit_breaker)
             for cid in container_ids
         ]
 
@@ -214,6 +229,8 @@ async def fetch_all_container_configs(
     timeout: int = 5,
     max_concurrent: int = 10,
     api_key: str | None = None,
+    retry_count: int = 3,
+    retry_delay: int | None = None,
 ) -> dict[str, dict | None]:
     """
     Convenience function to fetch all container configs with proper session management.
@@ -229,7 +246,9 @@ async def fetch_all_container_configs(
         Dict mapping container_id to config
     """
     async with AsyncAPIClient(api_url, timeout, max_concurrent, api_key) as client:
-        return await client.fetch_batch_configs(container_ids, circuit_breaker)
+        return await client.fetch_batch_configs(
+            container_ids, circuit_breaker, retry_count=retry_count,
+            retry_delay=retry_delay)
 
 
 def fetch_container_configs_sync(
@@ -239,6 +258,8 @@ def fetch_container_configs_sync(
     timeout: int = 5,
     max_concurrent: int = 10,
     api_key: str | None = None,
+    retry_count: int = 3,
+    retry_delay: int | None = None,
 ) -> dict[str, dict | None]:
     """
     Synchronous wrapper for async batch fetch - for use in sync code.
@@ -263,7 +284,8 @@ def fetch_container_configs_sync(
                 future = executor.submit(
                     asyncio.run,
                     fetch_all_container_configs(
-                        container_ids, api_url, circuit_breaker, timeout, max_concurrent, api_key
+                        container_ids, api_url, circuit_breaker, timeout, max_concurrent, api_key,
+                        retry_count, retry_delay
                     )
                 )
                 return future.result()
@@ -271,13 +293,15 @@ def fetch_container_configs_sync(
             # Use existing loop
             return loop.run_until_complete(
                 fetch_all_container_configs(
-                    container_ids, api_url, circuit_breaker, timeout, max_concurrent, api_key
+                    container_ids, api_url, circuit_breaker, timeout, max_concurrent, api_key,
+                        retry_count, retry_delay
                 )
             )
     except RuntimeError:
         # No event loop, create new one
         return asyncio.run(
             fetch_all_container_configs(
-                container_ids, api_url, circuit_breaker, timeout, max_concurrent, api_key
+                container_ids, api_url, circuit_breaker, timeout, max_concurrent, api_key,
+                        retry_count, retry_delay
             )
         )
