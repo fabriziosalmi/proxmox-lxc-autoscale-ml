@@ -71,6 +71,9 @@ ENDPOINTS = [
 ]
 
 
+KNOWN_METHODS = frozenset({'GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'})
+
+
 def _escape(text):
     """Minimal HTML escaping for the self-documenting home page."""
     return (
@@ -335,6 +338,7 @@ def check_cluster_status_route():
 # --- Operations --------------------------------------------------------------
 
 @app.route('/health/check', methods=['GET'])
+@rate_limit
 def health_check_route():
     logging.info("Health check endpoint accessed")
     return health_check()
@@ -346,6 +350,7 @@ def metrics_route():
 
 
 @app.route('/routes', methods=['GET'])
+@rate_limit
 @require_api_key
 def list_routes():
     routes = []
@@ -370,9 +375,13 @@ def _start_timer():
 def _record_request_metrics(response):
     start_time = getattr(request, 'start_time', None)
     duration = None if start_time is None else time.monotonic() - start_time
-    # Use the matched rule rather than the raw path so metric cardinality stays bounded.
+    # Both labels are clamped. The endpoint uses the matched rule rather than
+    # the raw path; the method is checked against the known verbs, because an
+    # unmatched route never reaches @rate_limit (it is a per-view decorator) so
+    # a client could mint an unbounded number of series at line rate.
     endpoint = request.url_rule.rule if request.url_rule is not None else 'unmatched'
-    record_api_request(request.method, endpoint, response.status_code, duration)
+    method = request.method if request.method in KNOWN_METHODS else 'other'
+    record_api_request(method, endpoint, response.status_code, duration)
     return response
 
 

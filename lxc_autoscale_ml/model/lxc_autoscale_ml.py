@@ -194,6 +194,7 @@ def run_cycle(config, circuit_breaker=None):
         # older documentation.
         timeout=api_config.get("timeout_seconds", api_config.get("timeout", 5)),
         max_concurrent=api_config.get("max_concurrent", 10),
+        api_key=api_config.get("api_key"),
     )
 
     batch_duration = time.monotonic() - batch_start

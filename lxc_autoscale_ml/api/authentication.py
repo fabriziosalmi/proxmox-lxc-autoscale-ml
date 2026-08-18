@@ -21,7 +21,8 @@ def require_api_key(f):
     """
     Decorator to require API key authentication.
 
-    Expects API key in X-API-Key header or api_key query parameter.
+    Expects the API key in the X-API-Key header. The query parameter form was
+    removed: it leaked the key into access logs.
     Configure API keys in lxc_autoscale_api.yaml under 'api_keys' section.
 
     Example config:
@@ -38,13 +39,14 @@ def require_api_key(f):
         if not auth_config.get('enabled', False):
             return f(*args, **kwargs)
 
-        # Get API key from header or query param
-        api_key = request.headers.get('X-API-Key') or request.args.get('api_key')
+        # Header only. Accepting ?api_key= put the secret in the gunicorn
+        # access log, in shell history, and in any proxy log in front of it.
+        api_key = request.headers.get('X-API-Key')
 
         if not api_key:
             return jsonify({
                 "status": "error",
-                "message": "Missing API key. Provide via X-API-Key header or api_key parameter."
+                "message": "Missing API key. Provide it in the X-API-Key header."
             }), 401
 
         # Verify API key
@@ -56,8 +58,18 @@ def require_api_key(f):
                 "message": "API authentication misconfigured"
             }), 500
 
-        # Simple constant-time comparison
-        key_valid = any(hmac.compare_digest(api_key, valid_key) for valid_key in valid_keys)
+        # Constant-time comparison. compare_digest raises TypeError on a
+        # non-ASCII str, so a configured key containing e.g. a curly quote made
+        # EVERY request fail with a 500 and a traceback that never named the
+        # key. Compare bytes instead.
+        try:
+            provided = api_key.encode("utf-8")
+            key_valid = any(
+                hmac.compare_digest(provided, str(valid_key).encode("utf-8"))
+                for valid_key in valid_keys
+            )
+        except (AttributeError, UnicodeError):
+            key_valid = False
 
         if not key_valid:
             current_app.logger.warning(f"Invalid API key attempt from {request.remote_addr}")

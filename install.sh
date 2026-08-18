@@ -116,6 +116,8 @@ install_lxc_autoscale_ml() {
 
     # Create necessary directories
     mkdir -p /etc/lxc_autoscale_ml /usr/local/bin/lxc_autoscale_api /usr/local/bin/lxc_autoscale_ml
+    # The configs below carry API keys.
+    chmod 0750 /etc/lxc_autoscale_ml
 
     # Clone the repository
     REPO_URL="https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml.git"
@@ -153,11 +155,16 @@ install_config() {
     name=$(basename "$source_file")
     local target="/etc/lxc_autoscale_ml/${name}"
 
+    # 0600: lxc_autoscale_api.yaml holds authentication.api_keys, and the
+    # model config holds the matching api.api_key. They were installed
+    # world-readable into a world-readable directory.
     if [[ -e "$target" ]]; then
-        mv "$source_file" "${target}.new"
+        install -m 0600 -o root -g root "$source_file" "${target}.new"
+        rm -f "$source_file"
         log "WARNING" "${target} already exists; shipped defaults written to ${target}.new" "$WARNING"
     else
-        mv "$source_file" "$target"
+        install -m 0600 -o root -g root "$source_file" "$target"
+        rm -f "$source_file"
         log "SUCCESS" "Installed ${target}" "$CHECKMARK"
     fi
 }
