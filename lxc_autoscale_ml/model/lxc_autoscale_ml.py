@@ -195,6 +195,10 @@ def run_cycle(config, circuit_breaker=None):
         timeout=api_config.get("timeout_seconds", api_config.get("timeout", 5)),
         max_concurrent=api_config.get("max_concurrent", 10),
         api_key=api_config.get("api_key"),
+        # retry_logic is documented as governing API calls; it used to reach
+        # only apply_scaling.
+        retry_count=config.get("retry_logic", {}).get("max_retries", 3),
+        retry_delay=config.get("retry_logic", {}).get("retry_delay"),
     )
 
     batch_duration = time.monotonic() - batch_start
