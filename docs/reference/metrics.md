@@ -179,8 +179,7 @@ curl http://proxmox:5000/health/check
 {
   "status": "healthy",
   "checks": {
-    "lxc_commands": { "ok": true, "detail": "ok" },
-    "configuration": { "ok": true, "detail": "node=proxmox" }
+    "lxc_commands": { "ok": true, "detail": "ok" }
   }
 }
 ```
