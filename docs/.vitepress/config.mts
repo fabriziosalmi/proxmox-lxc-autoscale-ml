@@ -4,6 +4,9 @@ export default defineConfig({
   title: 'LXC AutoScale ML',
   description: 'ML-powered autoscaling for Proxmox LXC containers',
   base: '/proxmox-lxc-autoscale-ml/',
+  // The hostname carries the base path on purpose: VitePress joins it with each
+  // page's route, so without it every URL in the sitemap would point at a 404.
+  sitemap: { hostname: 'https://fabriziosalmi.github.io/proxmox-lxc-autoscale-ml/' },
 
   head: [
     // Everything this site loads is first-party. 'unsafe-inline' is required
