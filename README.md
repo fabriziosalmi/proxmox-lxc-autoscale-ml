@@ -13,18 +13,25 @@ Three systemd services, sharing nothing but a metrics file on disk.
 
 ![LXC AutoScale ML Architecture](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_autoscale_ml.png?raw=true)
 
-**Example output:**
+**Example output** (a scaling cycle, from the actual log format strings):
 ```
-2024-08-20 13:07:56,393 [INFO] Data loaded successfully from /var/log/lxc_metrics.json.
-2024-08-20 13:07:56,399 [INFO] Data preprocessed successfully.
-2024-08-20 13:07:56,416 [INFO] Feature engineering, spike detection, and trend detection completed.
-2024-08-20 13:07:56,417 [INFO] Features used for training: ['cpu_memory_ratio', 'cpu_per_process', 'cpu_trend', 'cpu_usage_percent', 'filesystem_free_gb', 'filesystem_total_gb', 'filesystem_usage_gb', 'io_reads', 'io_writes', 'max_cpu', 'max_memory', 'memory_per_process', 'memory_trend', 'memory_usage_mb', 'min_cpu', 'min_memory', 'network_rx_bytes', 'network_tx_bytes', 'process_count', 'rolling_mean_cpu', 'rolling_mean_memory', 'rolling_std_cpu', 'rolling_std_memory', 'swap_total_mb', 'swap_usage_mb', 'time_diff']
-2024-08-20 13:07:56,549 [INFO] IsolationForest model training completed.
-2024-08-20 13:07:56,549 [INFO] Processing containers for scaling decisions...
-2024-08-20 13:07:56,600 [INFO] Applying scaling actions for container 104: CPU - Scale Up, RAM - Scale Up | Confidence: 87.41%
-2024-08-20 13:07:57,257 [INFO] Successfully scaled CPU for LXC ID 104 to 4 CPU units.
-2024-08-20 13:07:57,916 [INFO] Successfully scaled RAM for LXC ID 104 to 8192 RAM units.
-2024-08-20 13:07:57,916 [INFO] Sleeping for 60 seconds before the next run.
+2026-08-18 13:07:56,393 [INFO] Data loaded successfully from /var/log/lxc_metrics.json.
+2026-08-18 13:07:56,399 [INFO] Data preprocessed successfully.
+2026-08-18 13:07:56,416 [INFO] Feature engineering, spike detection, and trend detection completed.
+2026-08-18 13:07:56,549 [INFO] IsolationForest model training completed.
+2026-08-18 13:07:56,549 [INFO] Processing containers for scaling decisions...
+2026-08-18 13:07:56,551 [INFO] Batch fetching configs for 12 containers...
+2026-08-18 13:07:56,974 [INFO] Batch fetch completed in 0.42s: 12/12 successful (28.6 containers/sec)
+2026-08-18 13:07:56,600 [INFO] Applying scaling actions for container 104: CPU - Scale Up, RAM - No Scaling | Confidence: 87.41%
+2026-08-18 13:07:57,257 [INFO] Successfully scaled CPU for LXC ID 104 to 4 CPU units.
+2026-08-18 13:07:57,300 [INFO] No scaling needed for container 105. | Confidence: 12.80%
+2026-08-18 13:07:57,916 [INFO] Sleeping for 600 seconds before the next run.
+```
+
+With `scaling.dry_run: true`, the action line reads instead:
+
+```
+2026-08-18 13:07:56,600 [INFO] [dry_run] Would scale container 104: CPU - Scale Up (-> 4), RAM - No Scaling (-> None) | Confidence: 87.41%
 ```
 
 ## Table of Contents
@@ -182,9 +189,15 @@ because `pct` requires it.
 > deprecated but still accepted, so existing scripts keep working.
 > Every endpoint takes its parameters from a JSON body or the query string.
 
-> **Security Note**: Use the `X-API-Key` header for authenticated requests, and
-> see [Configuration](docs/reference/configuration.md) for binding the API to
-> `127.0.0.1` — it runs as root and executes `pct` commands.
+> **Security**: authentication is **off** in the shipped configuration and the
+> API binds to every interface, so out of the box anything that can reach port
+> 5000 can resize, snapshot and destroy containers — as root. Set
+> `server.host: 127.0.0.1` unless the model runs on another host; if it does,
+> enable `authentication`, set a matching `api.api_key` in the model config, and
+> put TLS in front. See [Configuration](docs/reference/configuration.md).
+>
+> Authentication is by the `X-API-Key` header only. The `?api_key=` form was
+> removed in 1.4.0 because it wrote the key into the access log.
 
 ### 2. Monitor Component
 

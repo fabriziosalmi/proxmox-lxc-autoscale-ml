@@ -6,6 +6,7 @@ monitor settings that no configuration file has, and a `gunicorn` section the
 systemd unit ignored. These tests fail when the docs and the code drift apart
 again.
 """
+import json
 import pathlib
 import re
 
@@ -33,6 +34,22 @@ def flask_app():
         yield lxc_autoscale_api.app
     finally:
         api_config.load_config = original
+
+
+@pytest.fixture
+def client_for_docs(flask_app, monkeypatch):
+    """The real app with Proxmox stubbed, so documented bodies can be compared
+    against what the code actually returns."""
+    import health_check
+    import lxc_management
+
+    monkeypatch.setattr(lxc_management.LXCManager, "_run_command",
+                        lambda self, cmd: "cores: 2\nmemory: 2048\n")
+    monkeypatch.setattr(health_check, "_check_pct", lambda: (True, "ok"))
+    health_check._probe_cache.update({"at": 0.0, "result": None})
+    flask_app.config["AUTHENTICATION"] = {"enabled": False}
+    flask_app.config["RATE_LIMITING"] = {"enabled": False}
+    return flask_app.test_client()
 
 
 @pytest.fixture(scope="module")
@@ -353,3 +370,72 @@ class TestAuthenticationClaims:
     def test_the_source_agrees(self):
         source = (ROOT / "lxc_autoscale_ml/api/authentication.py").read_text()
         assert "request.args.get('api_key')" not in source
+
+
+class TestDocumentedResponses:
+    """Response bodies and status codes, driven against the real app.
+
+    The previous guards checked that endpoints, keys and metric names *exist*.
+    They said nothing about what the API actually returns, so the reference
+    could document a `timestamp` the health check never emits, a structured
+    snapshot list where the code returns raw `pct` stdout, a `/routes` object
+    where it returns a bare array, error bodies keyed on `error`/`details`
+    where the code uses `message`/`errors`, and a 404 no code path produces.
+    """
+
+    REFERENCE = ROOT / "docs/reference/api-endpoints.md"
+
+    def test_the_health_check_body_matches(self, client_for_docs):
+        documented = self._json_blocks_containing('"status": "healthy"')
+        actual = client_for_docs.get("/health/check").get_json()
+        assert documented, "the health check response is not documented"
+        for block in documented:
+            assert set(block) == set(actual), (
+                f"documented health check keys {sorted(block)} != actual {sorted(actual)}"
+            )
+            assert set(block["checks"]) == set(actual["checks"])
+
+    def test_the_validation_error_body_matches(self, client_for_docs):
+        actual = client_for_docs.post("/scale/cores", json={"lxc_id": 104, "cores": 999})
+        assert actual.status_code == 400
+        body = actual.get_json()
+        text = self.REFERENCE.read_text()
+        for key in body:
+            assert f'"{key}"' in text, f"the 400 body has {key!r} but the reference never shows it"
+        for absent in ("details",):
+            assert f'"{absent}"' not in text, (
+                f"the reference documents a {absent!r} field no error body has"
+            )
+
+    def test_no_status_code_is_documented_that_no_route_produces(self):
+        """404 was documented for "container not found"; a missing container
+        makes pct fail, which surfaces as 500."""
+        text = self.REFERENCE.read_text()
+        assert "| 404 |" not in text, "the API has no code path that returns 404"
+
+    def test_routes_is_documented_as_the_array_it_returns(self, client_for_docs):
+        actual = client_for_docs.get("/routes").get_json()
+        assert isinstance(actual, list)
+        section = self.REFERENCE.read_text()
+        section = section[section.index("### GET /routes"):]
+        section = section[:section.index("---")]
+        block = re.search(r"```json\n(.*?)```", section, re.S).group(1).strip()
+        assert block.startswith("["), (
+            "/routes returns a bare array; the reference shows an object"
+        )
+        documented_keys = set(json.loads(block)[0])
+        assert documented_keys == set(actual[0]), (
+            f"documented {sorted(documented_keys)} != actual {sorted(actual[0])}"
+        )
+
+    def _json_blocks_containing(self, needle):
+        blocks = []
+        for path in (self.REFERENCE, ROOT / "docs/guide/getting-started.md",
+                     ROOT / "docs/reference/metrics.md"):
+            for block in re.findall(r"```json\n(.*?)```", path.read_text(), re.S):
+                if needle in block:
+                    try:
+                        blocks.append(json.loads(block))
+                    except json.JSONDecodeError:
+                        pass
+        return blocks
