@@ -1,14 +1,14 @@
 # Requires Python 3.10-3.12. See docs/guide/requirements.md.
 Flask==3.1.3
 gunicorn==23.0.0  # Production WSGI server for the API
-requests==2.33.0
+requests==2.34.2
 aiohttp==3.14.3  # For async API calls
-scikit-learn==1.5.0
+scikit-learn==1.9.0
 pandas==2.1.4
 numpy==1.26.2
-PyYAML==6.0.1
+PyYAML==6.0.3
 aiofiles==23.2.1
 psutil==5.9.6
 
 # Optional but recommended
-prometheus-client==0.19.0  # For metrics export
+prometheus-client==0.26.0  # For metrics export
