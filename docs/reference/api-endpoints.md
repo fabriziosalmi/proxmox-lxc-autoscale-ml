@@ -87,8 +87,13 @@ curl http://localhost:5000/health/check
 ```json
 {
   "status": "healthy",
-  "timestamp": "2024-12-24T12:00:00Z"
+  "checks": {
+    "lxc_commands": { "ok": true, "detail": "ok" }
+  }
 }
+
+Returns **503** with the same shape when a check fails, so it can be used
+directly as a systemd or load-balancer probe.
 ```
 
 ---
@@ -127,15 +132,23 @@ curl -H "X-API-Key: YOUR_KEY" http://localhost:5000/routes
 **Response (200 OK):**
 
 ```json
-{
-  "status": "success",
-  "routes": [
-    {"endpoint": "/health/check", "methods": ["GET"]},
-    {"endpoint": "/scale/cores", "methods": ["POST"]},
-    ...
-  ]
-}
+[
+  {
+    "endpoint": "set_cores",
+    "methods": "OPTIONS,POST",
+    "url": "/scale/cores"
+  },
+  {
+    "endpoint": "get_lxc_config_route",
+    "methods": "GET,HEAD,OPTIONS",
+    "url": "/resource/lxc/config"
+  }
+]
 ```
+
+A bare array, not an object. `endpoint` is Flask's internal view name, `url` is
+the route, and `methods` is a comma-joined string that includes the ones Flask
+adds for you (`HEAD`, `OPTIONS`).
 
 ---
 
@@ -174,10 +187,11 @@ curl -X POST http://localhost:5000/scale/cores \
 
 | Code | Condition |
 |------|-----------|
-| 400 | Invalid parameters |
-| 401 | Missing/invalid API key |
-| 404 | Container not found |
-| 500 | Scaling failed |
+| 400 | Validation failed, or no JSON body |
+| 401 | Authentication enabled, no `X-API-Key` header |
+| 403 | `X-API-Key` sent but wrong |
+| 429 | Rate limit exceeded |
+| 500 | The `pct` command failed — including when the container does not exist |
 
 ---
 
@@ -302,15 +316,16 @@ curl -H "X-API-Key: YOUR_KEY" \
 ```json
 {
   "status": "success",
-  "data": [
-    {
-      "name": "backup_20241224",
-      "timestamp": "2024-12-24T06:00:00Z",
-      "description": ""
-    }
-  ]
+  "message": "Snapshots listed for container 104",
+  "data": "backup_20241224            2024-12-24 06:00:00     no-description"
 }
 ```
+
+::: warning
+`data` is the raw stdout of `pct listsnapshot`, not a structured list. Every
+endpoint that wraps a `pct` command returns its output verbatim in `data`; parse
+it as text, and expect the format to follow whatever your Proxmox version emits.
+:::
 
 ---
 
@@ -522,52 +537,81 @@ curl -H "X-API-Key: YOUR_KEY" \
 
 ---
 
-## Error Responses
+## Error responses
+
+Every error body uses `message`; validation errors add `errors`. None of them
+use `error` or `details`, which earlier versions of this page showed.
 
 ### 400 Bad Request
 
-Invalid parameters:
+Validation failed, or a mutating request arrived without a JSON body:
 
 ```json
 {
   "status": "error",
-  "error": "Invalid lxc_id: must be between 100 and 999999"
+  "message": "Validation failed",
+  "errors": [
+    "Cores must be between 1 and 128, got 999"
+  ]
 }
 ```
 
+`errors` lists every field that failed, not just the first.
+
 ### 401 Unauthorized
 
-Missing or invalid API key:
+Authentication is enabled and no `X-API-Key` header was sent:
 
 ```json
 {
   "status": "error",
-  "error": "Missing or invalid API key"
+  "message": "Missing API key. Provide it in the X-API-Key header."
+}
+```
+
+### 403 Forbidden
+
+A key was sent and it does not match. **A wrong key is 403, not 401** — 401
+means the header was absent.
+
+```json
+{
+  "status": "error",
+  "message": "Invalid API key"
 }
 ```
 
 ### 429 Too Many Requests
 
-Rate limit exceeded:
-
 ```json
 {
   "status": "error",
-  "error": "Rate limit exceeded",
+  "error": "Rate limit exceeded. Please try again later.",
   "retry_after_seconds": 45,
   "limit": 120,
   "window_seconds": 60
 }
 ```
 
+Carries `Retry-After` and the `X-RateLimit-*` headers. This is the one error
+body that uses `error` rather than `message`.
+
 ### 500 Internal Server Error
 
-Server error:
+The `pct` command failed, timed out, or is not installed:
 
 ```json
 {
   "status": "error",
-  "error": "Internal server error",
-  "details": "Error message"
+  "message": "An internal error occurred. Please contact support if the issue persists."
 }
 ```
+
+With `error_handling.show_stack_traces: true` the message carries the exception
+text and a `stack_trace` field is added. Leave it off outside debugging: the
+exception text can include `pct` stderr.
+
+::: warning There is no 404
+A container that does not exist makes `pct` fail, which surfaces as **500**, not
+404. Nothing in the API distinguishes "absent" from "broken".
+:::

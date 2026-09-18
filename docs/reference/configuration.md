@@ -219,8 +219,9 @@ scaling:
   ram_scale_up_threshold: 75  # RAM usage percentage to trigger scale-up
   ram_scale_down_threshold: 30  # RAM usage percentage to trigger scale-down
   # Minimum confidence (0-100) required before a scaling action is applied.
-  # 0 disables the check. Confidence is the distance of the prediction from the
-  # model's decision boundary.
+  # 0 disables the check. Confidence is the percentile of this sample's distance
+  # from the model's decision boundary among the distances seen while training:
+  # 90 means "further from the boundary than 90% of this container's history".
   min_confidence: 0
 
   dry_run: false  # If true, log scaling decisions without calling the API
@@ -418,11 +419,16 @@ state. Gunicorn logs a warning at startup if `workers` is above 1.
 | `circuit_breaker.timeout_seconds` | integer | `1800` | How long it stays open. Must exceed `interval_seconds`: the breaker is consulted once per container per cycle, so a shorter window has always expired by then and blocks nothing. The model warns at startup if it does not. |
 | `ignore_lxc` | list | `[]` | Container IDs to skip. Matched as strings, so `[101]` and `["101"]` both work. |
 
-On confidence: it is the distance of the prediction from the model's decision
-boundary, mapped onto 0-100. It is not a probability. Before v1.3.0 the formula
-produced roughly 50-150%, so it could not be compared against a percentage at
-all -- which is why `min_confidence` now defaults to 0 rather than the 70 this
-page used to claim.
+On confidence: it is the **percentile** of this sample's distance from the
+model's decision boundary among the distances seen while training. 90 means
+"further from the boundary than 90% of the history this model was fitted on".
+It is not a probability, and it says nothing about the *direction* of the
+anomaly.
+
+Because it is a percentile, the whole 0-100 range is reachable by construction.
+Two earlier definitions were not: one produced roughly 50-150%, and one capped
+near 27%, which silently disabled all scaling for any `min_confidence` above
+that. `min_confidence` still defaults to 0 -- opt in deliberately.
 
 ### Monitor
 

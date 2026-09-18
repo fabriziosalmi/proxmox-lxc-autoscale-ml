@@ -91,7 +91,7 @@ The ML model calculates these additional features:
 
 ```json
 {
-  "timestamp": "2024-12-24T13:07:56.123456",
+  "timestamp": "2026-08-18T13:07:56.123456+00:00",
   "container_id": "104",
   "cpu_usage_percent": 45.2,
   "memory_usage_mb": 2048,

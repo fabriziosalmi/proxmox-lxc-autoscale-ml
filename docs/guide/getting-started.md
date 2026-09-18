@@ -75,7 +75,9 @@ Expected response:
 ```json
 {
   "status": "healthy",
-  "timestamp": "2024-12-24T12:00:00Z"
+  "checks": {
+    "lxc_commands": { "ok": true, "detail": "ok" }
+  }
 }
 ```
 

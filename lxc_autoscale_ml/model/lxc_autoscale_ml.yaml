@@ -52,8 +52,9 @@ scaling:
   ram_scale_up_threshold: 75  # RAM usage percentage to trigger scale-up
   ram_scale_down_threshold: 30  # RAM usage percentage to trigger scale-down
   # Minimum confidence (0-100) required before a scaling action is applied.
-  # 0 disables the check. Confidence is the distance of the prediction from the
-  # model's decision boundary.
+  # 0 disables the check. Confidence is the percentile of this sample's distance
+  # from the model's decision boundary among the distances seen while training:
+  # 90 means "further from the boundary than 90% of this container's history".
   min_confidence: 0
 
   dry_run: false  # If true, log scaling decisions without calling the API
