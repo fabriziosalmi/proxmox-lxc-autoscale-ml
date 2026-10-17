@@ -5,7 +5,7 @@ import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from logging.handlers import RotatingFileHandler
 from subprocess import CalledProcessError, TimeoutExpired, check_output
 from typing import Any
@@ -432,7 +432,7 @@ async def collect_metrics_for_container(container_id: str, executor: ThreadPoolE
     container_metrics = {
         # Timezone-aware: naive local timestamps went backwards for an hour at
         # the DST fall-back, and `time_diff` is a training feature.
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "cpu_usage_percent": cpu_usage,
         "memory_usage_mb": memory_swap_usage.get("memory_usage_mb", 0.0),
         "swap_usage_mb": memory_swap_usage.get("swap_usage_mb", 0.0),
@@ -452,7 +452,7 @@ async def collect_metrics_for_container(container_id: str, executor: ThreadPoolE
 
 async def collect_and_export_metrics():
     """Collect and export metrics for all running LXC containers."""
-    start_time = datetime.now(timezone.utc)
+    start_time = datetime.now(UTC)
     metrics = {}
     containers = get_running_lxc_containers()
 
@@ -493,7 +493,7 @@ async def collect_and_export_metrics():
         logger.error("No container metrics were collected this cycle.")
         return
 
-    end_time = datetime.now(timezone.utc)
+    end_time = datetime.now(UTC)
     metrics["summary"] = {
         "collection_start_time": start_time.isoformat(),
         "collection_end_time": end_time.isoformat(),

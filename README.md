@@ -9,7 +9,7 @@ Three systemd services, sharing nothing but a metrics file on disk.
 
 **Developed and tested on Proxmox VE 8 (Debian 12).**
 
-![Platform](https://img.shields.io/badge/platform-Proxmox%20VE%208-green) ![Python Version](https://img.shields.io/badge/python-3.10--3.12-blue) ![License](https://img.shields.io/badge/license-MIT-blue)
+![Platform](https://img.shields.io/badge/platform-Proxmox%20VE%208-green) ![Python Version](https://img.shields.io/badge/python-3.11--3.13-blue) ![License](https://img.shields.io/badge/license-MIT-blue)
 
 ![LXC AutoScale ML Architecture](https://github.com/fabriziosalmi/proxmox-lxc-autoscale-ml/blob/main/docs/lxc_autoscale_ml.png?raw=true)
 
@@ -84,9 +84,9 @@ running `pct`. Each runs as its own systemd service.
 
 - **Proxmox host**: VE 8 (Debian 12). Developed and tested there.
 - **Operating system**: Debian-based Linux
-- **Python**: 3.10 to 3.12. Proxmox VE 9 ships 3.13, which the pinned
-  `numpy`, `pandas` and `scikit-learn` do not yet support — the API and the
-  monitor run there, the model does not.
+- **Python**: 3.11 to 3.13, the range CI tests. Proxmox VE 8 ships 3.11 and
+  Proxmox VE 9 ships 3.13; the model's pins now install on both, though it has
+  not yet been run on a VE 9 host.
 - **Dependencies**:
   ```bash
   git, python3-flask, python3-requests, python3-sklearn, python3-pandas, 

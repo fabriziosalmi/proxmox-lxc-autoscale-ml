@@ -138,7 +138,7 @@ class AsyncAPIClient:
                             )
                             return (container_id, None)
 
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     if attempt < retry_count - 1:
                         logging.warning(
                             f"Timeout fetching container {container_id}, "
