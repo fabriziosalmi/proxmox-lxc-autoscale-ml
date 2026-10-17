@@ -36,14 +36,13 @@ Default limits that can be adjusted in configuration:
 
 ### Python
 
-Python **3.10 to 3.12** is required, and the installation script verifies that
+Python **3.11 to 3.13** is required, and the installation script verifies that
 Python is available.
 
-The floor comes from the pinned `requests`, which needs 3.10; the ceiling from
-the pinned `numpy`, `pandas` and `scikit-learn`, which have no 3.13 wheels.
-Proxmox VE 8 (Debian 12) ships Python 3.11 and is the primary target. Proxmox VE
-9 (Debian 13) ships 3.13, so the ML component needs those three pins raised
-before it will install there; the API and the monitor are unaffected.
+The floor comes from the pinned `numpy`, `pandas` and `scikit-learn`, which need
+3.11; CI tests every version from 3.11 to 3.13. Proxmox VE 8 (Debian 12) ships
+Python 3.11 and is the primary target. Proxmox VE 9 (Debian 13) ships 3.13,
+which the pins support; the model has not yet been run on a VE 9 host.
 
 ```bash
 python3 --version

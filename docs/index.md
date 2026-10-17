@@ -54,12 +54,12 @@ It will report the decisions it would have taken without calling the API.
 | Requirement | Version |
 |-------------|---------|
 | Proxmox VE | 8.x (Debian 12). Developed and tested there. |
-| Python | 3.10 to 3.12 |
+| Python | 3.11 to 3.13 |
 | Operating system | Debian-based Linux |
 
-Proxmox VE 9 ships Python 3.13, which the pinned `numpy`, `pandas` and
-`scikit-learn` do not yet support. The API and the monitor run there; the model
-does not.
+Proxmox VE 9 ships Python 3.13, which CI tests and the pinned `numpy`,
+`pandas` and `scikit-learn` support. The model has not yet been run on a VE 9
+host.
 
 ## How it works
 
