@@ -8,7 +8,7 @@ pandas==3.0.5
 numpy==2.4.4
 PyYAML==6.0.3
 aiofiles==25.1.0
-psutil==5.9.6
+psutil==7.2.2
 
 # Optional but recommended
 prometheus-client==0.26.0  # For metrics export
