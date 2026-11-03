@@ -6,6 +6,11 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    ignore:
+      # numpy 2.5 requires Python >=3.12; the floor is 3.11 (PVE 8 / Debian 12).
+      # Drop this entry when 3.11 support is dropped.
+      - dependency-name: "numpy"
+        versions: [">=2.5"]
     groups:
       python-dependencies:
         patterns:
