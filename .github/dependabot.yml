@@ -2,6 +2,8 @@ version: 2
 updates:
   # Python runtime and tooling dependencies
   - package-ecosystem: pip
+    cooldown:
+      default-days: 7
     directory: "/"
     schedule:
       interval: weekly
@@ -21,6 +23,8 @@ updates:
 
   # VitePress documentation site
   - package-ecosystem: npm
+    cooldown:
+      default-days: 7
     directory: "/docs"
     schedule:
       interval: weekly
@@ -35,6 +39,8 @@ updates:
 
   # Pinned action versions in the workflows
   - package-ecosystem: github-actions
+    cooldown:
+      default-days: 7
     directory: "/"
     schedule:
       interval: monthly
